@@ -16,6 +16,7 @@ class Pokemon:
         # Used for other damaging debuffs
         self.kills = 0
         self.fainted = 0
+        self.damage_done = 0
 
     def __str__(self):
             return f'Species = {self.species} -- Nickname = {self.nickname}'
@@ -83,6 +84,7 @@ def assign_pokemon(pokemon_line):
     else:
         pokes[owned_by] = [nxt_poke]
 
+#Gets the nickname of each mon and assigns it to them in the pokes dict
 def grab_nickname(line):
 
     player_nickname = get_player_and_nickname(line[2])
@@ -92,8 +94,13 @@ def grab_nickname(line):
 
     species = line[3].split(",")[0]
 
-    #Assign the Nickname to the right pokemon Pokemon
-    print (pokes[player])
+    #Assign the Nickname to the right pokemon Pokemon -- TODO properly
+    for pokemon in pokes[player]:
+        if pokemon.species == species:
+            pokemon.nickname = nickname
+            break
+    
+    print(pokes)
 
 # Splits the player and nickname segement into their individual components
 # Example: ['', 'switch', 'p1a: Nuke', 'Calyrex-Shadow, L50', '100\\/100']
@@ -111,12 +118,19 @@ def get_player_and_nickname(segment):
             nickname += ':'
         split_list[1] = nickname
 
+    #Nicknames have leading space for some reason -- remove it
+    split_list[1] = split_list[1].lstrip()
+
     if "p1" in split_list[0]:
         split_list[0] = 'p1'
     elif "p2" in split_list[0]:
         split_list[0] = 'p2'
     
     return split_list[0:2]
+
+def check_damage(line):
+
+
 
 # Main Script runs here
 if battle_log:
@@ -142,5 +156,11 @@ if battle_log:
                 # Replace is literaly just for Zoroark
                 case 'switch' | 'drag' | 'replace':
                     grab_nickname(line)
+
+                #Detect Damage -- if a pokemon does damage, record it
+                case '-damage':
+                    check_damage(line)
+                
+
 
     
