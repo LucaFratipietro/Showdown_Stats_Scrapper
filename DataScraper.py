@@ -14,9 +14,22 @@ class Poke:
         # Used to maintain state in case of a toxic/burn kill
         self.statusBy = "null"
         # Used for other damaging debuffs
-        self.startBy = []
         self.kills = 0
         self.fainted = 0
+
+# Function to open and parse the HTML file
+def parse_html_script(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        # Read the HTML content
+        content = file.read()
+
+        # Parse the HTML content using the built-in html.parser
+        soup = BeautifulSoup(content, 'html.parser')
+
+        # Extract all <script> tags content
+        scripts = [script.string for script in soup.find_all('script') if script.string]
+
+        return scripts
 
     
 # List of trainers
@@ -34,35 +47,26 @@ lastSwitchedPoke = ""
 currentWeatherSetter = ""
 weatherMove = 0
 
-# Flags to print things once if there's something to review
-seenFirstWeather = False
-seenReplace = False
-
 # Turn counter, mostly for detailed results and debugging
 turn = 0
 
-
-# Function to open and parse the HTML file
-def parse_html_script(file_path):
-    with open(file_path, 'r', encoding='utf-8') as file:
-        # Read the HTML content
-        content = file.read()
-
-        # Parse the HTML content using the built-in html.parser
-        soup = BeautifulSoup(content, 'html.parser')
-
-        # Extract all <script> tags content
-        scripts = [script.string for script in soup.find_all('script') if script.string]
-
-        return scripts
-
-# Provide the path to your HTML file
+# Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
 file_path = 'Replays/Test 1 -- OpenSheet -- Game 2.html'
 
-# Parse and print the headers
-scripts = parse_html_script(file_path)
+# Get the Battlelog from the html file
+battle_log = parse_html_script(file_path)[0]
+
+def split_battle_log(battle_log):
+    split_log = battle_log.splitlines()
+    logs = []
+    for log in split_log:
+        log = log.split("|")
+        logs.append(log)
+    return logs
+
 # Print script content
-if scripts:
-    print("\nScript content:")
-    for script_content in scripts:
-        print(f"  {script_content}")
+if battle_log:
+    logs = split_battle_log(battle_log)
+    for log in logs:
+        print(f'{log}')
+    
