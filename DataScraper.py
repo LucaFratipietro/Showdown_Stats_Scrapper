@@ -1,13 +1,13 @@
 from bs4 import BeautifulSoup
 
-class Trainer:
-    def __init__(self, p="null", name="null", win="null"):
+class Player:
+    def __init__(self, position="null", name="null", win="null"):
         self.name = name
-        self.p = p
+        self.position = position
         self.win = win
 
 
-class Poke:
+class Pokemon:
     def __init__(self, species="null"):
         self.species = species
         self.nickname = "null"
@@ -16,6 +16,12 @@ class Poke:
         # Used for other damaging debuffs
         self.kills = 0
         self.fainted = 0
+
+    def __str__(self):
+            return f'Species = {self.species} -- Nickname = {self.nickname}'
+        
+    def __repr__(self):
+            return f'Species = {self.species} -- Nickname = {self.nickname}'
 
 # Function to open and parse the HTML file
 def parse_html_script(file_path):
@@ -33,7 +39,7 @@ def parse_html_script(file_path):
 
     
 # List of trainers
-trainers = []
+players = []
 # Dictionary of Pokémon indexed by trainer
 pokes = {}
 
@@ -64,9 +70,34 @@ def split_battle_log(battle_log):
         logs.append(log)
     return logs
 
-# Print script content
+def assign_pokemon(pokemon_line):
+
+    # Grab the Player
+    owned_by = pokemon_line[2]
+    species = pokemon_line[3].split(",")[0]
+
+    nxt_poke = Pokemon(species=species)
+    if owned_by in pokes:
+        pokes[owned_by].append(nxt_poke)
+    else:
+        pokes[owned_by] = [nxt_poke]
+
+
+# Main Script runs here
 if battle_log:
     logs = split_battle_log(battle_log)
-    for log in logs:
-        print(f'{log}')
+
+    for line in logs:
+        if len(line) > 1:
+
+            match line[1]:
+                # Adds the players to the list of trainers
+                case 'player':
+                    players.append(Player(name=line[3], position=line[2]))
+
+                case 'poke':
+                    assign_pokemon(line)
+
+    
+    print(pokes)
     
