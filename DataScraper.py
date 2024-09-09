@@ -1,10 +1,10 @@
 from bs4 import BeautifulSoup
 
 class Trainer:
-    def __init__(self, p="null", name="null"):
+    def __init__(self, p="null", name="null", win="null"):
         self.name = name
         self.p = p
-        self.win = 0
+        self.win = win
 
 
 class Poke:
@@ -19,9 +19,9 @@ class Poke:
         self.fainted = 0
 
     
-# List of trainers (equivalent to the array of trainers in PHP)
+# List of trainers
 trainers = []
-# Dictionary of Pokémon indexed by trainer (equivalent to $pokes in PHP)
+# Dictionary of Pokémon indexed by trainer
 pokes = {}
 
 # Other variables associated with damaging moves
@@ -57,7 +57,7 @@ def parse_html_script(file_path):
         return scripts
 
 # Provide the path to your HTML file
-file_path = 'Gen9NatDexDraft-2024-08-28-sarkev-icebender.html'
+file_path = 'Replays/Test 1 -- OpenSheet -- Game 2.html'
 
 # Parse and print the headers
 scripts = parse_html_script(file_path)
