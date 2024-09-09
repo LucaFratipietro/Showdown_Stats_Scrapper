@@ -76,16 +76,51 @@ def assign_pokemon(pokemon_line):
     owned_by = pokemon_line[2]
     species = pokemon_line[3].split(",")[0]
 
+    #Assign the pokemon to each player
     nxt_poke = Pokemon(species=species)
     if owned_by in pokes:
         pokes[owned_by].append(nxt_poke)
     else:
         pokes[owned_by] = [nxt_poke]
 
+def grab_nickname(line):
+
+    player_nickname = get_player_and_nickname(line[2])
+
+    player = player_nickname[0]
+    nickname = player_nickname[1]
+
+    species = line[3].split(",")[0]
+
+    #Assign the Nickname to the right pokemon Pokemon
+    print (pokes[player])
+
+# Splits the player and nickname segement into their individual components
+# Example: ['', 'switch', 'p1a: Nuke', 'Calyrex-Shadow, L50', '100\\/100']
+#Pass segement 'p1a: Nuke'
+# Returns []
+def get_player_and_nickname(segment):
+
+    split_list = segment.split(':')
+
+    if len(split_list) > 2:
+        # WHO NICKNAMES MONS WITH :
+        nickname = ''
+        for part in split_list[1:]:
+            nickname += part
+            nickname += ':'
+        split_list[1] = nickname
+
+    if "p1" in split_list[0]:
+        split_list[0] = 'p1'
+    elif "p2" in split_list[0]:
+        split_list[0] = 'p2'
+    
+    return split_list[0:2]
 
 # Main Script runs here
 if battle_log:
-    logs = split_battle_log(battle_log)
+    logs = split_battle_log(battle_log)  #ALEX DUMBASS UPGRADE TO 3.10.* ISH OR ELSE THIS WONT WORK
 
     for line in logs:
         if len(line) > 1:
@@ -95,9 +130,17 @@ if battle_log:
                 case 'player':
                     players.append(Player(name=line[3], position=line[2]))
 
+                # Assigns each pokemon to their respective player dict
                 case 'poke':
                     assign_pokemon(line)
 
-    
-    print(pokes)
+                # Need to find the nickname cause for SOME reason, the moves are performed by the nicknames of the mons not the species???
+                # This hasent been changed in 8 years????
+
+                # Switcing in is voluntary (switch, u-turn)
+                # Drag is roar and whirlwind
+                # Replace is literaly just for Zoroark
+                case 'switch' | 'drag' | 'replace':
+                    grab_nickname(line)
+
     
