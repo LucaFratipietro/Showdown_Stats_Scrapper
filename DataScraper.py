@@ -63,7 +63,7 @@ weatherMove = 0
 turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
-file_path = 'Replays\Test 1 -- OpenSheet -- Game 2.html'
+file_path = 'Replays\Burn + Toxic Death Replay.html'
 
 # Get the Battlelog from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -110,65 +110,74 @@ def grab_nickname(line):
 # REMINDER: DO NOT INCREMENT MURDER COUNTER IF TEAMMATE WAS KILLED (or add a betrayal count)
 def check_damage(line):
     global lastMoveUsed, lastMovePoke
+
+    # Get the attacked/dead pokemon from the player and the mons nickname
+    player, nickname = get_player_and_nickname_from_line(line[2])
+    target_pokemon = get_Pokemon_by_player_and_nickname(player, nickname)
+
+    # Figure out how mon died/took damage, first assume it was from the last move
+    damaging_move = lastMoveUsed
+    attacking_pokemon = lastMovePoke
+
     #Check if damage fainted the opponent
     if(line[3] == '0 fnt'):
-        # Get the dead pokemon from the player and the mons nickname
-        player, nickname = get_player_and_nickname_from_line(line[2])
-        dead_pokemon = get_Pokemon_by_player_and_nickname(player, nickname)
         
         # Record that the mon fainted
-        dead_pokemon.fainted = True
-        
-        # Figure out how mon died, first assume it was from the last move
-        killing_move = lastMoveUsed
-        killer = lastMovePoke
+        target_pokemon.fainted = True
         
         if (len(line) > 4):
             # a kill from indirect damage
             fromSource = line[4]
             fromSource = fromSource.replace("[from] ", "")
-            killing_move = fromSource
+            damaging_move = fromSource
             
             # Recoil is attributed to the opposing poke. Yeah, I know.
             # If it's recoil, it's a self-kill, so drop down
-            if len(line) > 5 and killing_move != "recoil":
+            if len(line) > 5 and damaging_move != "recoil":
                 # We have a "[of]" for attribution of the kill! Hooray!
                 ofSource = line[5]
                 ofSource = ofSource.replace("[of] ", "")
                 killer_player, killer_nickname = get_player_and_nickname_from_line(ofSource)
-                killer = get_Pokemon_by_player_and_nickname(killer_player, killer_nickname)
+                attacking_pokemon = get_Pokemon_by_player_and_nickname(killer_player, killer_nickname)
             else:
                 # No "[of]", requires variable state to determine
                 # Otherwise, it's probably a self-death
                 
                 # Check status and weather
-                match killing_move:
+                match damaging_move:
                     case "brn" | "psn":
-                        killer = dead_pokemon.statusBy
+                        attacking_pokemon = target_pokemon.statusBy
                     case "sandstorm" | "hail":
-                        killer = currentWeatherSetter
+                        attacking_pokemon = currentWeatherSetter
                     case _:
                         # Not status nor weather...
                         # Check side starts
                         side_start_result = sideStarted.get(player, {}).get(fromSource, None)
                         
                         if side_start_result is not None:
-                            killer = side_start_result
+                            attacking_pokemon = side_start_result
                         else:
                             # Check starts
-                            start_result = dead_pokemon.startBy.get(fromSource, None)
+                            start_result = target_pokemon.startBy.get(fromSource, None)
                             
                             if start_result is not None:
-                                killer = start_result
+                                attacking_pokemon = start_result
                             else:
-                                killer = dead_pokemon
+                                attacking_pokemon = target_pokemon
         
         # If killer is not on same team, increment kill
-        if not check_if_killer_on_same_team(killer, player):
-            killer_mon = get_Pokemon_by_player_and_nickname(get_other_player(player),killer)
+        if not check_if_on_same_team(attacking_pokemon, player):
+            killer_mon = get_Pokemon_by_player_and_nickname(get_other_player(player),attacking_pokemon)
             killer_mon.kills += 1
             #Calculate Damage Done -- case changes if they fainted cause you cannot divide by zero :)
-            calculate_faint_damage(dead_pokemon,killer_mon)
+            calculate_faint_damage(target_pokemon,killer_mon)
+    
+    #Check Damage if the Mon didn't faint TODO: Edge Cases, dear god the edge cases
+    else:
+        if not check_if_on_same_team(attacking_pokemon, player):
+            attacking_mon = get_Pokemon_by_player_and_nickname(get_other_player(player),attacking_pokemon)
+            #Calculate Damage Done -- case changes if they did not faint
+            calculate_damage(target_pokemon,attacking_mon,line[3])
 
 def check_move(line):
     global lastMovePoke, lastMoveUsed
@@ -182,6 +191,20 @@ def check_move(line):
     print(lastMovePoke, lastMoveUsed)
 
 # -------------- Helper Methods ----------------
+
+# Calculate the Damage of a Mon
+# Example Line: '[11\/176]'
+# Variable Types -- dead_mon : Pokemon(Object), killer_mon : Pokemon(Object), damage_seg : str
+def calculate_damage(target_mon,attacking_mon,damage_seg):
+
+    #Get the New HP
+    new_hp = int(damage_seg.split("\\/")[0])
+    
+    damage = (target_mon.hp - new_hp) / target_mon.max_hp * 100
+    attacking_mon.damage_done += damage
+
+    # For Serious
+    target_mon.hp = new_hp
 
 # Calculate the Damage of a Mon that Fainted
 # Example Line: '0 fnt'
@@ -243,7 +266,7 @@ def get_Pokemon_by_player_and_nickname(player, nickname):
     # if this happens, something bad happened
     return None
 
-def check_if_killer_on_same_team(killer, fainted_team):
+def check_if_on_same_team(killer, fainted_team):
     for species in pokes[fainted_team]:
         if pokes[fainted_team][species].nickname == killer:
             return True
