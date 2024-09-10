@@ -8,9 +8,10 @@ class Player:
 
 
 class Pokemon:
-    def __init__(self, species="null", hp=0):
+    def __init__(self, species="null"):
         self.species = species
-        self.hp = hp
+        self.hp = 0
+        self.max_hp = -1
         self.nickname = "null"
         # Used to maintain state in case of a toxic/burn kill
         self.statusBy = "null"
@@ -21,10 +22,12 @@ class Pokemon:
         self.damage_done = 0
 
     def __str__(self):
-            return f'Species = {self.species} -- Nickname = {self.nickname} -- Kills {self.kills} -- Fainted {self.fainted}'
+            return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
+            \n Damage Done: {self.damage_done}'
         
     def __repr__(self):
-            return f'Species = {self.species} -- Nickname = {self.nickname} -- Kills {self.kills} -- Fainted {self.fainted}'
+            return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
+            \n Damage Done: {self.damage_done}'
 
 # Function to open and parse the HTML file
 def parse_html_script(file_path):
@@ -98,19 +101,23 @@ def grab_nickname(line):
     species = line[3].split(",")[0]
 
     #Assign the Nickname to the right pokemon Pokemon
-    pokes[player][species].nickname = nickname
+    nickname_pokemon = pokes[player][species]
+    nickname_pokemon.nickname = nickname
+
+    #Assign initial hp value
+    set_hp(line[4],nickname_pokemon)
 
 # REMINDER: DO NOT INCREMENT MURDER COUNTER IF TEAMMATE WAS KILLED (or add a betrayal count)
 def check_damage(line):
     global lastMoveUsed, lastMovePoke
     #Check if damage fainted the opponent
     if(line[3] == '0 fnt'):
-        # Get the current pokemon from the player and the mons nickname
+        # Get the dead pokemon from the player and the mons nickname
         player, nickname = get_player_and_nickname_from_line(line[2])
-        curr_pokemon = get_Pokemon_by_player_and_nickname(player, nickname)
+        dead_pokemon = get_Pokemon_by_player_and_nickname(player, nickname)
         
         # Record that the mon fainted
-        curr_pokemon.fainted = True
+        dead_pokemon.fainted = True
         
         # Figure out how mon died, first assume it was from the last move
         killing_move = lastMoveUsed
@@ -137,7 +144,7 @@ def check_damage(line):
                 # Check status and weather
                 match killing_move:
                     case "brn" | "psn":
-                        killer = curr_pokemon.statusBy
+                        killer = dead_pokemon.statusBy
                     case "sandstorm" | "hail":
                         killer = currentWeatherSetter
                     case _:
@@ -149,16 +156,19 @@ def check_damage(line):
                             killer = side_start_result
                         else:
                             # Check starts
-                            start_result = curr_pokemon.startBy.get(fromSource, None)
+                            start_result = dead_pokemon.startBy.get(fromSource, None)
                             
                             if start_result is not None:
                                 killer = start_result
                             else:
-                                killer = curr_pokemon
+                                killer = dead_pokemon
         
         # If killer is not on same team, increment kill
         if not check_if_killer_on_same_team(killer, player):
-            get_Pokemon_by_player_and_nickname(get_other_player(player),killer).kills += 1
+            killer_mon = get_Pokemon_by_player_and_nickname(get_other_player(player),killer)
+            killer_mon.kills += 1
+            #Calculate Damage Done -- case changes if they fainted cause you cannot divide by zero :)
+            calculate_faint_damage(dead_pokemon,killer_mon)
 
 def check_move(line):
     global lastMovePoke, lastMoveUsed
@@ -172,6 +182,30 @@ def check_move(line):
     print(lastMovePoke, lastMoveUsed)
 
 # -------------- Helper Methods ----------------
+
+# Calculate the Damage of a Mon that Fainted
+# Example Line: '0 fnt'
+# Variable Types -- dead_mon : Pokemon(Object), killer_mon : Pokemon(Object)
+def calculate_faint_damage(dead_mon,killer_mon):
+
+    damage = dead_mon.hp / dead_mon.max_hp * 100
+    killer_mon.damage_done += damage
+
+    # For Fun
+    dead_mon.hp = 0
+
+
+# Sets the current HP of the Pokemon Object
+# Variable Types -- health : str, Pokemon : Pokemon(Object)
+# Health Example: '100\\/100'
+def set_hp(health,pokemon):
+
+    hp_value = health.split("\\/")
+    pokemon.hp = int(hp_value[0])
+    
+    #On first set hp call, set the Max Hp of the Pokemon and never return here agiiiin
+    if pokemon.max_hp == -1:
+        pokemon.max_hp = int(hp_value[1])
 
 # Splits the player and nickname segement into their individual components
 # Example: ['', 'switch', 'p1a: Nuke', 'Calyrex-Shadow, L50', '100\\/100']
