@@ -60,7 +60,7 @@ weatherMove = 0
 turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
-file_path = '\Replays\Test 2 -- indirect damage kills.html'
+file_path = 'Replays\Test 1 -- OpenSheet -- Game 2.html'
 
 # Get the Battlelog from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -102,6 +102,7 @@ def grab_nickname(line):
 
 # REMINDER: DO NOT INCREMENT MURDER COUNTER IF TEAMMATE WAS KILLED (or add a betrayal count)
 def check_damage(line):
+    global lastMoveUsed, lastMovePoke
     #Check if damage fainted the opponent
     if(line[3] == '0 fnt'):
         # Get the current pokemon from the player and the mons nickname
@@ -157,9 +158,10 @@ def check_damage(line):
         
         # If killer is not on same team, increment kill
         if not check_if_killer_on_same_team(killer, player):
-            killer.kills += 1
+            get_Pokemon_by_player_and_nickname(get_other_player(player),killer).kills += 1
 
 def check_move(line):
+    global lastMovePoke, lastMoveUsed
     # get the mons nickname
     _, a_nickname = get_player_and_nickname_from_line(line[2])
 
@@ -174,7 +176,7 @@ def check_move(line):
 # Splits the player and nickname segement into their individual components
 # Example: ['', 'switch', 'p1a: Nuke', 'Calyrex-Shadow, L50', '100\\/100']
 #Pass segment 'p1a: Nuke'
-# Returns []
+# Returns tuple(str,str)
 def get_player_and_nickname_from_line(segment):
 
     split_list = segment.split(':')
@@ -209,10 +211,17 @@ def get_Pokemon_by_player_and_nickname(player, nickname):
 
 def check_if_killer_on_same_team(killer, fainted_team):
     for species in pokes[fainted_team]:
-        if species == killer:
+        if pokes[fainted_team][species].nickname == killer:
             return True
         
     return False
+
+# Coding Excellence
+def get_other_player(player):
+    if player == 'p1':
+        return 'p2'
+    else:
+        return 'p1'
 
 # Main Script runs here
 if battle_log:
@@ -246,3 +255,5 @@ if battle_log:
                 #Detect Move -- see which pokemon did the move and save it as a global
                 case 'move':
                     check_move(line)
+
+    print(pokes)
