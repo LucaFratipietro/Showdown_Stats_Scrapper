@@ -63,6 +63,8 @@ file_path = 'Replays/Test 1 -- OpenSheet -- Game 2.html'
 # Get the Battlelog from the html file
 battle_log = parse_html_script(file_path)[0]
 
+# ------------- Called Methods in Main --------------------
+
 def split_battle_log(battle_log):
     split_log = battle_log.splitlines()
     logs = []
@@ -89,8 +91,7 @@ def grab_nickname(line):
 
     player_nickname = get_player_and_nickname(line[2])
 
-    player = player_nickname[0]
-    nickname = player_nickname[1]
+    player, nickname  = player_nickname
 
     species = line[3].split(",")[0]
 
@@ -99,8 +100,32 @@ def grab_nickname(line):
         if pokemon.species == species:
             pokemon.nickname = nickname
             break
-    
-    print(pokes)
+
+def check_damage(line):
+
+    player_nickname = get_player_and_nickname(line[2])
+
+    player, nickname  = player_nickname
+
+    #Check if damage fainted the opponent
+    if(line[2] == '0 fnt'):
+        #Damn he died
+        print('d')
+
+    return
+
+def check_move(line):
+
+    attacker_player_nickname = get_player_and_nickname(line[2])
+    _, a_nickname = attacker_player_nickname
+
+    #Store move info as a globalto track damage and other stats with
+    lastMovePoke = a_nickname
+    lastMoveUsed = line[3]
+
+    print(lastMovePoke, lastMoveUsed)
+
+# -------------- Helper Methods ----------------
 
 # Splits the player and nickname segement into their individual components
 # Example: ['', 'switch', 'p1a: Nuke', 'Calyrex-Shadow, L50', '100\\/100']
@@ -126,11 +151,8 @@ def get_player_and_nickname(segment):
     elif "p2" in split_list[0]:
         split_list[0] = 'p2'
     
-    return split_list[0:2]
-
-def check_damage(line):
-
-
+    split_list_fixed = split_list[0:2]
+    return split_list_fixed[0], split_list_fixed[1]
 
 # Main Script runs here
 if battle_log:
@@ -160,6 +182,10 @@ if battle_log:
                 #Detect Damage -- if a pokemon does damage, record it
                 case '-damage':
                     check_damage(line)
+
+                #Detect Move -- see which pokemon did the move and save it as a global
+                case 'move':
+                    check_move(line)
                 
 
 
