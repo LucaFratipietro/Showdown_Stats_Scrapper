@@ -130,7 +130,7 @@ def check_move(line):
 # Splits the player and nickname segement into their individual components
 # Example: ['', 'switch', 'p1a: Nuke', 'Calyrex-Shadow, L50', '100\\/100']
 #Pass segement 'p1a: Nuke'
-# Returns []
+# Returns tuple
 def get_player_and_nickname(segment):
 
     split_list = segment.split(':')
