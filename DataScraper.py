@@ -8,21 +8,23 @@ class Player:
 
 
 class Pokemon:
-    def __init__(self, species="null"):
+    def __init__(self, species="null", hp=0):
         self.species = species
+        self.hp = hp
         self.nickname = "null"
         # Used to maintain state in case of a toxic/burn kill
         self.statusBy = "null"
         # Used for other damaging debuffs
+        self.startBy = {}
         self.kills = 0
-        self.fainted = 0
+        self.fainted = False
         self.damage_done = 0
 
     def __str__(self):
-            return f'Species = {self.species} -- Nickname = {self.nickname}'
+            return f'Species = {self.species} -- Nickname = {self.nickname} -- Kills {self.kills} -- Fainted {self.fainted}'
         
     def __repr__(self):
-            return f'Species = {self.species} -- Nickname = {self.nickname}'
+            return f'Species = {self.species} -- Nickname = {self.nickname} -- Kills {self.kills} -- Fainted {self.fainted}'
 
 # Function to open and parse the HTML file
 def parse_html_script(file_path):
@@ -47,7 +49,7 @@ pokes = {}
 # Other variables associated with damaging moves
 lastMoveUsed = ""
 lastMovePoke = ""
-sideStarted = []
+sideStarted = {}
 
 # For weather
 lastSwitchedPoke = ""
@@ -58,7 +60,7 @@ weatherMove = 0
 turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
-file_path = 'Replays/Test 1 -- OpenSheet -- Game 2.html'
+file_path = '\Replays\Test 2 -- indirect damage kills.html'
 
 # Get the Battlelog from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -82,44 +84,86 @@ def assign_pokemon(pokemon_line):
     #Assign the pokemon to each player
     nxt_poke = Pokemon(species=species)
     if owned_by in pokes:
-        pokes[owned_by].append(nxt_poke)
+        pokes[owned_by][species] = nxt_poke
     else:
-        pokes[owned_by] = [nxt_poke]
+        pokes[owned_by] = {species: nxt_poke}
 
 #Gets the nickname of each mon and assigns it to them in the pokes dict
 def grab_nickname(line):
 
-    player_nickname = get_player_and_nickname(line[2])
+    player_nickname = get_player_and_nickname_from_line(line[2])
 
     player, nickname  = player_nickname
 
     species = line[3].split(",")[0]
 
-    #Assign the Nickname to the right pokemon Pokemon -- TODO properly
-    for pokemon in pokes[player]:
-        if pokemon.species == species:
-            pokemon.nickname = nickname
-            break
+    #Assign the Nickname to the right pokemon Pokemon
+    pokes[player][species].nickname = nickname
 
+# REMINDER: DO NOT INCREMENT MURDER COUNTER IF TEAMMATE WAS KILLED (or add a betrayal count)
 def check_damage(line):
-
-    player_nickname = get_player_and_nickname(line[2])
-
-    player, nickname  = player_nickname
-
     #Check if damage fainted the opponent
-    if(line[2] == '0 fnt'):
-        #Damn he died
-        print('d')
-
-    return
+    if(line[3] == '0 fnt'):
+        # Get the current pokemon from the player and the mons nickname
+        player, nickname = get_player_and_nickname_from_line(line[2])
+        curr_pokemon = get_Pokemon_by_player_and_nickname(player, nickname)
+        
+        # Record that the mon fainted
+        curr_pokemon.fainted = True
+        
+        # Figure out how mon died, first assume it was from the last move
+        killing_move = lastMoveUsed
+        killer = lastMovePoke
+        
+        if (len(line) > 4):
+            # a kill from indirect damage
+            fromSource = line[4]
+            fromSource = fromSource.replace("[from] ", "")
+            killing_move = fromSource
+            
+            # Recoil is attributed to the opposing poke. Yeah, I know.
+            # If it's recoil, it's a self-kill, so drop down
+            if len(line) > 5 and killing_move != "recoil":
+                # We have a "[of]" for attribution of the kill! Hooray!
+                ofSource = line[5]
+                ofSource = ofSource.replace("[of] ", "")
+                killer_player, killer_nickname = get_player_and_nickname_from_line(ofSource)
+                killer = get_Pokemon_by_player_and_nickname(killer_player, killer_nickname)
+            else:
+                # No "[of]", requires variable state to determine
+                # Otherwise, it's probably a self-death
+                
+                # Check status and weather
+                match killing_move:
+                    case "brn" | "psn":
+                        killer = curr_pokemon.statusBy
+                    case "sandstorm" | "hail":
+                        killer = currentWeatherSetter
+                    case _:
+                        # Not status nor weather...
+                        # Check side starts
+                        side_start_result = sideStarted.get(player, {}).get(fromSource, None)
+                        
+                        if side_start_result is not None:
+                            killer = side_start_result
+                        else:
+                            # Check starts
+                            start_result = curr_pokemon.startBy.get(fromSource, None)
+                            
+                            if start_result is not None:
+                                killer = start_result
+                            else:
+                                killer = curr_pokemon
+        
+        # If killer is not on same team, increment kill
+        if not check_if_killer_on_same_team(killer, player):
+            killer.kills += 1
 
 def check_move(line):
+    # get the mons nickname
+    _, a_nickname = get_player_and_nickname_from_line(line[2])
 
-    attacker_player_nickname = get_player_and_nickname(line[2])
-    _, a_nickname = attacker_player_nickname
-
-    #Store move info as a globalto track damage and other stats with
+    #Store move info as a global to track damage and other stats with
     lastMovePoke = a_nickname
     lastMoveUsed = line[3]
 
@@ -129,9 +173,9 @@ def check_move(line):
 
 # Splits the player and nickname segement into their individual components
 # Example: ['', 'switch', 'p1a: Nuke', 'Calyrex-Shadow, L50', '100\\/100']
-#Pass segement 'p1a: Nuke'
+#Pass segment 'p1a: Nuke'
 # Returns []
-def get_player_and_nickname(segment):
+def get_player_and_nickname_from_line(segment):
 
     split_list = segment.split(':')
 
@@ -154,6 +198,22 @@ def get_player_and_nickname(segment):
     split_list_fixed = split_list[0:2]
     return split_list_fixed[0], split_list_fixed[1]
 
+
+def get_Pokemon_by_player_and_nickname(player, nickname):
+    for species in pokes[player]:
+        if pokes[player][species].nickname == nickname:
+            return pokes[player][species]
+        
+    # if this happens, something bad happened
+    return None
+
+def check_if_killer_on_same_team(killer, fainted_team):
+    for species in pokes[fainted_team]:
+        if species == killer:
+            return True
+        
+    return False
+
 # Main Script runs here
 if battle_log:
     logs = split_battle_log(battle_log)  #ALEX DUMBASS UPGRADE TO 3.10.* ISH OR ELSE THIS WONT WORK
@@ -171,11 +231,11 @@ if battle_log:
                     assign_pokemon(line)
 
                 # Need to find the nickname cause for SOME reason, the moves are performed by the nicknames of the mons not the species???
-                # This hasent been changed in 8 years????
+                # This hasn't been changed in 8 years????
 
-                # Switcing in is voluntary (switch, u-turn)
+                # Switching in is voluntary (switch, u-turn)
                 # Drag is roar and whirlwind
-                # Replace is literaly just for Zoroark
+                # Replace is literally just for Zoroark
                 case 'switch' | 'drag' | 'replace':
                     grab_nickname(line)
 
@@ -186,7 +246,3 @@ if battle_log:
                 #Detect Move -- see which pokemon did the move and save it as a global
                 case 'move':
                     check_move(line)
-                
-
-
-    
