@@ -19,7 +19,7 @@ class Pokemon:
         self.damage_done = 0
 
     def __str__(self):
-            return f'Species = {self.species} -- Nickname = {self.nickname}'
+            return f'Species = {self.species} -- Nickname = {self.nickname} -- Kills = {self.kills}'
         
     def __repr__(self):
             return f'Species = {self.species} -- Nickname = {self.nickname}'
@@ -156,7 +156,7 @@ def get_player_and_nickname(segment):
 
 # Main Script runs here
 if battle_log:
-    logs = split_battle_log(battle_log)  #ALEX DUMBASS UPGRADE TO 3.10.* ISH OR ELSE THIS WONT WORK
+    logs = split_battle_log(battle_log) 
 
     for line in logs:
         if len(line) > 1:
