@@ -59,11 +59,15 @@ lastSwitchedPoke = ""
 currentWeatherSetter = ""
 weatherMove = 0
 
+# Flags to print things once if there's something to review
+seenFirstWeather = False
+seenReplace = False
+
 # Turn counter, mostly for detailed results and debugging
 turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
-file_path = 'Replays\Test 1 -- OpenSheet -- Game 2.html'
+file_path = '.\Replays\Test 5 -- Turn 0 Sandstorm and Manual Weather Set.html'
 
 # Get the Battlelog from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -180,6 +184,30 @@ def check_move(line):
     lastMoveUsed = line[3]
 
     print(lastMovePoke, lastMoveUsed)
+    
+def check_manual_weather_setter(line):
+    global currentWeatherSetter
+    currentWeatherSetter = lastMovePoke
+        
+def check_ability_weather_setter(line):
+    global currentWeatherSetter
+    
+    of_source = line[4]
+    of_source = of_source.replace("[of] ", "")
+    split_of_source = of_source.split(": ")
+    
+    if len(split_of_source) > 2:
+        # WHO NICKNAMES MONS WITH :
+        nickname = ''
+        for i in range(1, len(split_of_source)):
+            nickname += split_of_source[i]
+            if i != len(split_of_source) - 1:
+                nickname += ':'
+        split_of_source[1] = nickname
+        
+    currentWeatherSetter = split_of_source[1]
+            
+            
 
 # -------------- Helper Methods ----------------
 
@@ -213,14 +241,15 @@ def set_hp(health,pokemon):
 # Returns tuple(str,str)
 def get_player_and_nickname_from_line(segment):
 
-    split_list = segment.split(':')
+    split_list = segment.split(': ')
 
     if len(split_list) > 2:
         # WHO NICKNAMES MONS WITH :
         nickname = ''
-        for part in split_list[1:]:
-            nickname += part
-            nickname += ':'
+        for i in range(1, len(split_list)):
+            nickname += split_list[i]
+            if i != len(split_list) - 1:
+                nickname += ':'
         split_list[1] = nickname
 
     #Nicknames have leading space for some reason -- remove it
@@ -289,5 +318,25 @@ if battle_log:
                 #Detect Move -- see which pokemon did the move and save it as a global
                 case 'move':
                     check_move(line)
+                    
+                # Detect megas -- update the mon to its mega form (TODO: IN FUTURE IF THERE IS A MEGA)
+                case '-formechange':
+                    print("how did a mega get into Gen 9 VGC?")
+                
+                # Keep track of what mon set the weather
+                # Important for sandstorm damage / kills and older generation hail damage / kills    
+                case '-weather':
+                    # If line is 4 parts long, than its just upkeep
+                    
+                    # If it 3 parts long and not "none", this means weather was just set manually
+                    if(len(line) == 3 and line[2] != "none"):
+                        # record who set the weather on which team
+                        check_manual_weather_setter(line)
+                    
+                    # If it is 5 parts long, then weather was set by an ability
+                    if(len(line) == 5):
+                        check_ability_weather_setter(line)
+                    
+                    print(currentWeatherSetter)
 
     print(pokes)
