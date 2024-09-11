@@ -224,8 +224,14 @@ def check_status_application(line):
 
     affected_player, affected_player_nickname = get_player_and_nickname_from_line_segment(line[2])
     affected_player_pokemon = get_Pokemon_by_player_and_nickname(affected_player,affected_player_nickname)
+    applying_pokemon = get_Pokemon_by_player_and_nickname(get_other_player(affected_player),lastMovePoke)
 
-    affected_player_pokemon.statusBy = get_Pokemon_by_player_and_nickname(get_other_player(affected_player),lastMovePoke)
+    #On the affected mon --> set status by as the lastMovePoke
+    affected_player_pokemon.statusBy = applying_pokemon
+
+    #On the applying mon --> increase status_applied counter by one
+    applying_pokemon.statuses_inflicted += 1
+
 
 
 # Assign Winner based on line
