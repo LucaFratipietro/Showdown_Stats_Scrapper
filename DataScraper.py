@@ -220,8 +220,7 @@ def check_ability_weather_setter(line):
 # Status Case
 # Example Line: |-status|p1a: Nuke|tox --> Nuke has been Toxiced, check lastMoveMon to credit the mon who inflicted them
 def check_status_application(line):
-    global lastMovePoke
-
+    
     affected_player, affected_player_nickname = get_player_and_nickname_from_line_segment(line[2])
     affected_player_pokemon = get_Pokemon_by_player_and_nickname(affected_player,affected_player_nickname)
     applying_pokemon = get_Pokemon_by_player_and_nickname(get_other_player(affected_player),lastMovePoke)
@@ -232,6 +231,10 @@ def check_status_application(line):
     #On the applying mon --> increase status_applied counter by one
     applying_pokemon.statuses_inflicted += 1
 
+# Other Status Case
+# When the user applies status to themself -- think rest or toxic/flame orb etc.
+def check_self_status_application(line):
+    print('TODO !')
 
 
 # Assign Winner based on line
@@ -401,5 +404,9 @@ if battle_log:
                     # |-status|p1a: Nuke|tox --> Pokemon just gained status condition, check who applied it
                     if(len(line) == 4):
                         check_status_application(line)
+
+                    #TODO -- Verify this with REST and and Item infliction -- like toxic orb
+                    if(len(line) > 4):
+                        check_self_status_application(line)
 
     print(pokes)
