@@ -14,13 +14,15 @@ class Pokemon:
         self.max_hp = -1
         self.nickname = "null"
         # Used to maintain state in case of a toxic/burn kill
-        self.statusBy = "null"
+        self.statusBy = None
         # Used for other damaging debuffs
         self.startBy = {}
         self.kills = 0
         self.fainted = False
         self.damage_done = 0
         self.statuses_inflicted = 0
+        # Trick / Switcheroo nonsense
+        self.switched_item_and_previous_owner = None
 
     def __str__(self):
             return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
@@ -52,12 +54,14 @@ pokes = {}
 
 # Other variables associated with damaging moves
 lastMoveUsed = ""
-lastMovePoke = ""
+# Pokemon Object
+lastMovePoke = None
 sideStarted = {}
 
 # For weather
 lastSwitchedPoke = ""
-currentWeatherSetter = ""
+# Pokemon Object
+currentWeatherSetter = None
 weatherMove = 0
 
 # Flags to print things once if there's something to review
@@ -68,7 +72,7 @@ seenReplace = False
 turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
-file_path = 'Replays\Burn + Toxic Death Replay.html'
+file_path = 'Replays\Test 6 -- Burn + Toxic Death Replay.html'
 
 # Get the Battlelog from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -142,8 +146,8 @@ def check_damage(line):
                 # We have a "[of]" for attribution of the kill! Hooray!
                 ofSource = line[5]
                 ofSource = ofSource.replace("[of] ", "")
-                killer_player, killer_nickname = get_player_and_nickname_from_line_segment(ofSource)
-                attacking_pokemon = get_Pokemon_by_player_and_nickname(killer_player, killer_nickname)
+                # killer_player, killer_nickname = get_player_and_nickname_from_line_segment(ofSource)
+                # attacking_pokemon = get_Pokemon_by_player_and_nickname(killer_player, killer_nickname)
             else:
                 # No "[of]", requires variable state to determine
                 # Otherwise, it's probably a self-death
@@ -172,7 +176,7 @@ def check_damage(line):
         
         # If killer is not on same team, increment kill
         if not check_if_on_same_team(attacking_pokemon, player):
-            killer_mon = get_Pokemon_by_player_and_nickname(get_other_player(player),attacking_pokemon)
+            killer_mon = attacking_pokemon
             killer_mon.kills += 1
             #Calculate Damage Done -- case changes if they fainted cause you cannot divide by zero :)
             calculate_faint_damage(target_pokemon,killer_mon)
@@ -180,20 +184,20 @@ def check_damage(line):
     #Check Damage if the Mon didn't faint TODO: Edge Cases, dear god the edge cases
     else:
         if not check_if_on_same_team(attacking_pokemon, player):
-            attacking_mon = get_Pokemon_by_player_and_nickname(get_other_player(player),attacking_pokemon)
+            # attacking_mon = get_Pokemon_by_player_and_nickname(get_other_player(player),attacking_pokemon)
             #Calculate Damage Done -- case changes if they did not faint
-            calculate_damage(target_pokemon,attacking_mon,line[3])
+            calculate_damage(target_pokemon, attacking_pokemon, line[3])
 
 def check_move(line):
     global lastMovePoke, lastMoveUsed
-    # get the mons nickname
-    _, a_nickname = get_player_and_nickname_from_line_segment(line[2])
+    # get the mons player and nickname
+    a_player, a_nickname = get_player_and_nickname_from_line_segment(line[2])
 
     #Store move info as a global to track damage and other stats with
-    lastMovePoke = a_nickname
+    lastMovePoke = get_Pokemon_by_player_and_nickname(a_player, a_nickname)
     lastMoveUsed = line[3]
 
-    print(lastMovePoke, lastMoveUsed)
+    print(lastMovePoke.nickname, lastMoveUsed)
     
 def check_manual_weather_setter():
     global currentWeatherSetter
@@ -215,26 +219,50 @@ def check_ability_weather_setter(line):
                 nickname += ':'
         split_of_source[1] = nickname
         
-    currentWeatherSetter = split_of_source[1]
+    currentWeatherSetter = get_Pokemon_by_player_and_nickname(split_of_source[0][:2], split_of_source[1])
 
 # Status Case
 # Example Line: |-status|p1a: Nuke|tox --> Nuke has been Toxiced, check lastMoveMon to credit the mon who inflicted them
 def check_status_application(line):
-    
     affected_player, affected_player_nickname = get_player_and_nickname_from_line_segment(line[2])
     affected_player_pokemon = get_Pokemon_by_player_and_nickname(affected_player,affected_player_nickname)
-    applying_pokemon = get_Pokemon_by_player_and_nickname(get_other_player(affected_player),lastMovePoke)
+    
+    # This is the case that a status was inflicted by an item
+    if(len(line) > 4):
+        # check if the item was tricked onto the pokemon of not
+        # if this attribute (switched_item_and_previous_owner) is null, that means item was from the affected pokemon
+        if affected_player_pokemon.switched_item_and_previous_owner is None:
+            affected_player_pokemon.statusBy = affected_player_pokemon
+        # if the attribute was not none, that means the item was tricked onto the affected pokemon
+        else:
+            affected_player_pokemon.statusBy = affected_player_pokemon.switched_item_previous_owner
+    else:
+        #On the affected mon --> set status by as the lastMovePoke
+        affected_player_pokemon.statusBy = lastMovePoke
+        
+        # Check that the mon that used the status move is not the affected mon (think REST)
+        if lastMovePoke != affected_player_pokemon:
+            #On the applying mon --> increase status_applied counter by one
+            lastMovePoke.statuses_inflicted += 1
 
-    #On the affected mon --> set status by as the lastMovePoke
-    affected_player_pokemon.statusBy = applying_pokemon
-
-    #On the applying mon --> increase status_applied counter by one
-    applying_pokemon.statuses_inflicted += 1
-
-# Other Status Case
-# When the user applies status to themself -- think rest or toxic/flame orb etc.
-def check_self_status_application(line):
-    print('TODO !')
+# Ability and Switch shenanigans
+def check_activate(line):
+    activate_source = line[3].split(": ")
+    # check for trick or switcheroo first
+    # TODO: test if this actually works when tricking a flame or toxic orb
+    # TODO: think of tricking sticky barb
+    if activate_source[0] == 'move':
+        if activate_source[1] == 'Trick' or activate_source[1] == 'Switcheroo':
+            # TODO: consider nicknames with ": "
+            split_trick_user_components = line[2].split(": ")
+            trick_user_player = split_trick_user_components[0][:2]
+            trick_user_pokemon_nickname = split_trick_user_components[1]
+            
+            trick_target_pokemon_nickname = line[4].split(": ")[1]
+            trick_target_player = get_other_player(trick_user_player)
+            
+            trick_target_pokemon = get_Pokemon_by_player_and_nickname(trick_target_player, trick_target_pokemon_nickname)
+            trick_target_pokemon.switched_item_previous_owner = get_Pokemon_by_player_and_nickname(trick_user_player, trick_user_pokemon_nickname)
 
 
 # Assign Winner based on line
@@ -287,9 +315,9 @@ def set_hp(health,pokemon):
     if pokemon.max_hp == -1:
         pokemon.max_hp = int(hp_value[1])
 
-# Splits the player and nickname segement into their individual components
+# Splits the player and nickname segment into their individual components
 # Example: 'p1a: Nuke'
-#Pass segment 'p1a: Nuke'
+# Pass segment 'p1a: Nuke'
 # Returns tuple(str,str)
 def get_player_and_nickname_from_line_segment(segment):
 
@@ -324,9 +352,11 @@ def get_Pokemon_by_player_and_nickname(player, nickname):
     # if this happens, something bad happened
     return None
 
+# Method to check if the mon that got a kill was a teammate of the fainted mon
+# Takes as parameters - Killer (Pokemon Object) and Fainted Team (Str ex: 'p1')
 def check_if_on_same_team(killer, fainted_team):
     for species in pokes[fainted_team]:
-        if pokes[fainted_team][species].nickname == killer:
+        if pokes[fainted_team][species].nickname == killer.nickname:
             return True
         
     return False
@@ -389,24 +419,27 @@ if battle_log:
                     # If it 3 parts long and line 2 is not "none", this means weather was just set manually
                     if(len(line) == 3 and line[2] != "none"):
                         # record who set the weather on which team
-                        check_manual_weather_setter(line)
+                        check_manual_weather_setter()
                     
                     #|-weather|Sandstorm|[from] ability: Sand Stream|[of] p1a: Ty:Get:Mogged --> weather set by Sand Stream on entry
                     # If it is 5 parts long, then weather was set by an ability
                     if(len(line) == 5):
                         check_ability_weather_setter(line)
+                    
+                    print("The mon that last set the weather was: " + currentWeatherSetter.nickname)
                 
                 # Keeps track of status conditions
-                # Burn and posion are relevant for damage calculations
+                # Burn and poison are relevant for damage calculations
                 # Others like sleep and burn are tracked in the Pokemon object statuses
                 case '-status':
                     
                     # |-status|p1a: Nuke|tox --> Pokemon just gained status condition, check who applied it
-                    if(len(line) == 4):
-                        check_status_application(line)
-
-                    #TODO -- Verify this with REST and and Item infliction -- like toxic orb
-                    if(len(line) > 4):
-                        check_self_status_application(line)
+                    check_status_application(line)
+                
+                case '-activate':
+                    
+                    # the only case we know so far of this header is for trick/switcheroo
+                    # which is relevant when Kevin inevitably Klutz Switcheroo's a flame orb
+                    check_activate(line)
 
     print(pokes)
