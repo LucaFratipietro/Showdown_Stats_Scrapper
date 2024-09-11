@@ -4,7 +4,7 @@ class Player:
     def __init__(self, position="null", name="null", win="null"):
         self.name = name
         self.position = position
-        self.win = win
+        self.win = False
 
 
 class Pokemon:
@@ -20,6 +20,7 @@ class Pokemon:
         self.kills = 0
         self.fainted = False
         self.damage_done = 0
+        self.statuses_inflicted = 0
 
     def __str__(self):
             return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
@@ -98,7 +99,7 @@ def assign_pokemon(pokemon_line):
 #Gets the nickname of each mon and assigns it to them in the pokes dict
 def grab_nickname(line):
 
-    player_nickname = get_player_and_nickname_from_line(line[2])
+    player_nickname = get_player_and_nickname_from_line_segment(line[2])
 
     player, nickname  = player_nickname
 
@@ -116,7 +117,7 @@ def check_damage(line):
     global lastMoveUsed, lastMovePoke
 
     # Get the attacked/dead pokemon from the player and the mons nickname
-    player, nickname = get_player_and_nickname_from_line(line[2])
+    player, nickname = get_player_and_nickname_from_line_segment(line[2])
     target_pokemon = get_Pokemon_by_player_and_nickname(player, nickname)
 
     # Figure out how mon died/took damage, first assume it was from the last move
@@ -141,7 +142,7 @@ def check_damage(line):
                 # We have a "[of]" for attribution of the kill! Hooray!
                 ofSource = line[5]
                 ofSource = ofSource.replace("[of] ", "")
-                killer_player, killer_nickname = get_player_and_nickname_from_line(ofSource)
+                killer_player, killer_nickname = get_player_and_nickname_from_line_segment(ofSource)
                 attacking_pokemon = get_Pokemon_by_player_and_nickname(killer_player, killer_nickname)
             else:
                 # No "[of]", requires variable state to determine
@@ -186,7 +187,7 @@ def check_damage(line):
 def check_move(line):
     global lastMovePoke, lastMoveUsed
     # get the mons nickname
-    _, a_nickname = get_player_and_nickname_from_line(line[2])
+    _, a_nickname = get_player_and_nickname_from_line_segment(line[2])
 
     #Store move info as a global to track damage and other stats with
     lastMovePoke = a_nickname
@@ -194,7 +195,7 @@ def check_move(line):
 
     print(lastMovePoke, lastMoveUsed)
     
-def check_manual_weather_setter(line):
+def check_manual_weather_setter():
     global currentWeatherSetter
     currentWeatherSetter = lastMovePoke
         
@@ -215,8 +216,27 @@ def check_ability_weather_setter(line):
         split_of_source[1] = nickname
         
     currentWeatherSetter = split_of_source[1]
-            
-            
+
+# Status Case
+# Example Line: |-status|p1a: Nuke|tox --> Nuke has been Toxiced, check lastMoveMon to credit the mon who inflicted them
+def check_status_application(line):
+    global lastMovePoke
+
+    affected_player, affected_player_nickname = get_player_and_nickname_from_line_segment(line[2])
+    affected_player_pokemon = get_Pokemon_by_player_and_nickname(affected_player,affected_player_nickname)
+
+    affected_player_pokemon.statusBy = get_Pokemon_by_player_and_nickname(get_other_player(affected_player),lastMovePoke)
+
+
+# Assign Winner based on line
+# |win|Sixteen Gremlins
+def assign_winner(line):
+
+    winner = line[2]
+    for player in players:
+        if player.name == winner:
+            player.win = True
+
 
 # -------------- Helper Methods ----------------
 
@@ -259,10 +279,10 @@ def set_hp(health,pokemon):
         pokemon.max_hp = int(hp_value[1])
 
 # Splits the player and nickname segement into their individual components
-# Example: ['', 'switch', 'p1a: Nuke', 'Calyrex-Shadow, L50', '100\\/100']
+# Example: 'p1a: Nuke'
 #Pass segment 'p1a: Nuke'
 # Returns tuple(str,str)
-def get_player_and_nickname_from_line(segment):
+def get_player_and_nickname_from_line_segment(segment):
 
     split_list = segment.split(': ')
 
@@ -325,6 +345,11 @@ if battle_log:
                 case 'poke':
                     assign_pokemon(line)
 
+                # Winner is declared on this line
+                # |win|Sixteen Gremlins
+                case 'win':
+                    assign_winner(line)
+
                 # Need to find the nickname cause for SOME reason, the moves are performed by the nicknames of the mons not the species???
                 # This hasn't been changed in 8 years????
 
@@ -344,22 +369,31 @@ if battle_log:
                     
                 # Detect megas -- update the mon to its mega form (TODO: IN FUTURE IF THERE IS A MEGA)
                 case '-formechange':
-                    print("how did a mega get into Gen 9 VGC?")
+                    print("How did a mega get into Gen 9 VGC?")
                 
                 # Keep track of what mon set the weather
                 # Important for sandstorm damage / kills and older generation hail damage / kills    
                 case '-weather':
                     # If line is 4 parts long, than its just upkeep
                     
-                    # If it 3 parts long and not "none", this means weather was just set manually
+                    # |-weather|SunnyDay --> weather set manually
+                    # If it 3 parts long and line 2 is not "none", this means weather was just set manually
                     if(len(line) == 3 and line[2] != "none"):
                         # record who set the weather on which team
                         check_manual_weather_setter(line)
                     
+                    #|-weather|Sandstorm|[from] ability: Sand Stream|[of] p1a: Ty:Get:Mogged --> weather set by Sand Stream on entry
                     # If it is 5 parts long, then weather was set by an ability
                     if(len(line) == 5):
                         check_ability_weather_setter(line)
+                
+                # Keeps track of status conditions
+                # Burn and posion are relevant for damage calculations
+                # Others like sleep and burn are tracked in the Pokemon object statuses
+                case '-status':
                     
-                    print(currentWeatherSetter)
+                    # |-status|p1a: Nuke|tox --> Pokemon just gained status condition, check who applied it
+                    if(len(line) == 4):
+                        check_status_application(line)
 
     print(pokes)
