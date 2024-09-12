@@ -22,7 +22,7 @@ class Pokemon:
         self.damage_done = 0
         self.statuses_inflicted = 0
         # Trick / Switcheroo nonsense
-        self.switched_item_and_previous_owner = None
+        self.switched_item_previous_owner = None
 
     def __str__(self):
             return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
@@ -132,7 +132,7 @@ def check_damage(line):
     if(line[3] == '0 fnt'):
         
         # Record that the mon fainted
-        target_pokemon.fainted = True
+        target_pokemon.fainted = True # type: ignore
         
         if (len(line) > 4):
             # a kill from indirect damage
@@ -155,7 +155,7 @@ def check_damage(line):
                 # Check status and weather
                 match damaging_move:
                     case "brn" | "psn":
-                        attacking_pokemon = target_pokemon.statusBy
+                        attacking_pokemon = target_pokemon.statusBy # type: ignore
                     case "sandstorm" | "hail":
                         attacking_pokemon = currentWeatherSetter
                     case _:
@@ -167,7 +167,7 @@ def check_damage(line):
                             attacking_pokemon = side_start_result
                         else:
                             # Check starts
-                            start_result = target_pokemon.startBy.get(fromSource, None)
+                            start_result = target_pokemon.startBy.get(fromSource, None) # type: ignore
                             
                             if start_result is not None:
                                 attacking_pokemon = start_result
@@ -177,7 +177,7 @@ def check_damage(line):
         # If killer is not on same team, increment kill
         if not check_if_on_same_team(attacking_pokemon, player):
             killer_mon = attacking_pokemon
-            killer_mon.kills += 1
+            killer_mon.kills += 1 # type: ignore
             #Calculate Damage Done -- case changes if they fainted cause you cannot divide by zero :)
             calculate_faint_damage(target_pokemon,killer_mon)
     
@@ -197,7 +197,7 @@ def check_move(line):
     lastMovePoke = get_Pokemon_by_player_and_nickname(a_player, a_nickname)
     lastMoveUsed = line[3]
 
-    print(lastMovePoke.nickname, lastMoveUsed)
+    print(lastMovePoke.nickname, lastMoveUsed) # type: ignore
     
 def check_manual_weather_setter():
     global currentWeatherSetter
@@ -223,29 +223,29 @@ def check_ability_weather_setter(line):
 
 # Status Case
 # Example Line: |-status|p1a: Nuke|tox --> Nuke has been Toxiced, check lastMoveMon to credit the mon who inflicted them
-def check_status_application(line):
+def check_status(line):
     affected_player, affected_player_nickname = get_player_and_nickname_from_line_segment(line[2])
     affected_player_pokemon = get_Pokemon_by_player_and_nickname(affected_player,affected_player_nickname)
     
     # This is the case that a status was inflicted by an item
     if(len(line) > 4):
         # check if the item was tricked onto the pokemon of not
-        # if this attribute (switched_item_and_previous_owner) is null, that means item was from the affected pokemon
-        if affected_player_pokemon.switched_item_and_previous_owner is None:
-            affected_player_pokemon.statusBy = affected_player_pokemon
+        # if this attribute (switched_item_previous_owner) is null, that means item was from the affected pokemon
+        if affected_player_pokemon.switched_item_previous_owner is None: # type: ignore
+            affected_player_pokemon.statusBy = affected_player_pokemon # type: ignore
         # if the attribute was not none, that means the item was tricked onto the affected pokemon
         else:
-            affected_player_pokemon.statusBy = affected_player_pokemon.switched_item_previous_owner
+            affected_player_pokemon.statusBy = affected_player_pokemon.switched_item_previous_owner # type: ignore
     else:
         #On the affected mon --> set status by as the lastMovePoke
-        affected_player_pokemon.statusBy = lastMovePoke
+        affected_player_pokemon.statusBy = lastMovePoke # type: ignore
         
         # Check that the mon that used the status move is not the affected mon (think REST)
         if lastMovePoke != affected_player_pokemon:
             #On the applying mon --> increase status_applied counter by one
-            lastMovePoke.statuses_inflicted += 1
+            lastMovePoke.statuses_inflicted += 1 # type: ignore
 
-# Ability and Switch shenanigans
+# Ability Procs and Switcheroo/Trick shenanigans
 def check_activate(line):
     activate_source = line[3].split(": ")
     # check for trick or switcheroo first
@@ -262,7 +262,7 @@ def check_activate(line):
             trick_target_player = get_other_player(trick_user_player)
             
             trick_target_pokemon = get_Pokemon_by_player_and_nickname(trick_target_player, trick_target_pokemon_nickname)
-            trick_target_pokemon.switched_item_previous_owner = get_Pokemon_by_player_and_nickname(trick_user_player, trick_user_pokemon_nickname)
+            trick_target_pokemon.switched_item_previous_owner = get_Pokemon_by_player_and_nickname(trick_user_player, trick_user_pokemon_nickname) # type: ignore
 
 
 # Assign Winner based on line
@@ -426,7 +426,7 @@ if battle_log:
                     if(len(line) == 5):
                         check_ability_weather_setter(line)
                     
-                    print("The mon that last set the weather was: " + currentWeatherSetter.nickname)
+                    print("The mon that last set the weather was: " + currentWeatherSetter.nickname) # type: ignore
                 
                 # Keeps track of status conditions
                 # Burn and poison are relevant for damage calculations
@@ -434,7 +434,7 @@ if battle_log:
                 case '-status':
                     
                     # |-status|p1a: Nuke|tox --> Pokemon just gained status condition, check who applied it
-                    check_status_application(line)
+                    check_status(line)
                 
                 case '-activate':
                     
