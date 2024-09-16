@@ -72,9 +72,10 @@ seenReplace = False
 turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
+# TODO: Need update replays for the first 6 tests that use external replay and not user-perspective based replays
 file_path = 'Replays\Test 11 -- Volatile statuses (leech seed and confusion).html'
 
-# Get the Battlelog from the html file
+# Get the battle log from the html file
 battle_log = parse_html_script(file_path)[0]
 
 # ------------- Called Methods in Main --------------------
@@ -100,7 +101,7 @@ def assign_pokemon(pokemon_line):
     else:
         pokes[owned_by] = {species: nxt_poke}
 
-#Gets the nickname of each mon and assigns it to them in the pokes dict
+# Gets the nickname of each mon and assigns it to them in the pokes dict
 def grab_nickname(line):
 
     player_nickname = get_player_and_nickname_from_line_segment(line[2])
@@ -128,7 +129,7 @@ def check_damage(line):
     damaging_move = lastMoveUsed
     attacking_pokemon = lastMovePoke
 
-    #Check if damage fainted the opponent
+    # Check if damage fainted the opponent
     if(line[3] == '0 fnt'):
         
         # Record that the mon fainted
@@ -181,12 +182,48 @@ def check_damage(line):
             #Calculate Damage Done -- case changes if they fainted cause you cannot divide by zero :)
             calculate_faint_damage(target_pokemon,killer_mon)
     
-    #Check Damage if the Mon didn't faint TODO: Edge Cases, dear god the edge cases
+    # Check Damage if the Mon didn't faint TODO: Edge Cases, dear god the edge cases
     else:
+        damaging_mon = None
+        hp_segment = None
+        # base case: a damaging move caused the damage
+        if len(line) == 4:
+            damaging_mon = attacking_pokemon
+            hp_segment = line[3]
+        # time to find what caused damage
+        else:
+            from_source = line[4]
+            from_source = from_source.replace("[from] ", "")
+            
+            match from_source:
+                case "brn" | "psn":
+                    damaging_mon = target_pokemon.statusBy # type: ignore
+                    hp_segment = line[3]
+                case "sandstorm" | "hail":
+                        print("TBD")
+                case _:
+                    # Not status nor weather...
+                    # Check side starts
+                    side_start_result = sideStarted.get(player, {}).get(from_source, None)
+                        
+                    if side_start_result is not None:
+                        print("TBD")
+                    else:
+                        # Check starts
+                        start_result = target_pokemon.startBy.get(from_source, None) # type: ignore
+                        
+                        if start_result is not None:
+                            attacking_pokemon = start_result
+                            damaging_mon = attacking_pokemon
+                            hp_segment = line[3]
+                        else:
+                            attacking_pokemon = target_pokemon
+        # check first if the damage was not performed by self-infliction or teammate
         if not check_if_on_same_team(attacking_pokemon, player):
-            # attacking_mon = get_Pokemon_by_player_and_nickname(get_other_player(player),attacking_pokemon)
-            #Calculate Damage Done -- case changes if they did not faint
-            calculate_damage(target_pokemon, attacking_pokemon, line[3])
+            calculate_damage(target_pokemon, damaging_mon, hp_segment)
+        else:
+            # need to still update health if it was friendly fire
+            print("TBD")
 
 def check_move(line):
     global lastMovePoke, lastMoveUsed
@@ -273,6 +310,9 @@ def check_start(line):
     affected_player_pokemon = get_Pokemon_by_player_and_nickname(affected_player,affected_player_nickname)
     started = line[3]
     
+    if ("move: " in started):
+        started = started.split("move: ")[1]
+    
     # mark who started what on this pokemon
     affected_player_pokemon.startBy[started] = lastMovePoke # type: ignore
 
@@ -308,7 +348,7 @@ def calculate_damage(target_mon,attacking_mon,damage_seg):
     #Get the New HP
     new_hp = int(damage_seg.split("\\/")[0])
     
-    damage = (target_mon.hp - new_hp) / target_mon.max_hp * 100
+    damage = target_mon.hp - new_hp
     attacking_mon.damage_done += damage
 
     # For Serious
@@ -317,12 +357,10 @@ def calculate_damage(target_mon,attacking_mon,damage_seg):
 # Calculate the Damage of a Mon that Fainted
 # Example Line: '0 fnt'
 # Variable Types -- dead_mon : Pokemon(Object), killer_mon : Pokemon(Object)
-def calculate_faint_damage(dead_mon,killer_mon):
-
-    damage = dead_mon.hp / dead_mon.max_hp * 100
-    killer_mon.damage_done += damage
-
-    # For Fun
+def calculate_faint_damage(dead_mon,killer_mon):    
+    killer_mon.damage_done += dead_mon.hp
+    
+    # For fun
     dead_mon.hp = 0
 
 
