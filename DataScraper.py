@@ -26,11 +26,11 @@ class Pokemon:
 
     def __str__(self):
             return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
-            \n Damage Done: {self.damage_done}'
+            \n Damage Done: {self.damage_done} \n Volatile Statuses: {self.startBy} \n'
         
     def __repr__(self):
             return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
-            \n Damage Done: {self.damage_done}'
+            \n Damage Done: {self.damage_done} \n Volatile Statuses: {self.startBy} \n'
 
 # Function to open and parse the HTML file
 def parse_html_script(file_path):
@@ -72,7 +72,7 @@ seenReplace = False
 turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
-file_path = 'Replays\Test 6 -- Burn + Toxic Death Replay.html'
+file_path = 'Replays\Test 11 -- Volatile statuses (leech seed and confusion).html'
 
 # Get the Battlelog from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -198,11 +198,14 @@ def check_move(line):
     lastMoveUsed = line[3]
 
     print(lastMovePoke.nickname, lastMoveUsed) # type: ignore
-    
+
+# stores the mon that set the weather manually, like sunny day or rain dance
+# the weather header will directly follow the move being used, so we just store teh last move poke
 def check_manual_weather_setter():
     global currentWeatherSetter
     currentWeatherSetter = lastMovePoke
-        
+
+# stores the mon that set the weather via an ability on entry, like drought or drizzle
 def check_ability_weather_setter(line):
     global currentWeatherSetter
     
@@ -264,6 +267,26 @@ def check_activate(line):
             trick_target_pokemon = get_Pokemon_by_player_and_nickname(trick_target_player, trick_target_pokemon_nickname)
             trick_target_pokemon.switched_item_previous_owner = get_Pokemon_by_player_and_nickname(trick_user_player, trick_user_pokemon_nickname) # type: ignore
 
+# Used to track which mon set a volatile status on another mon           
+def check_start(line):
+    affected_player, affected_player_nickname = get_player_and_nickname_from_line_segment(line[2])
+    affected_player_pokemon = get_Pokemon_by_player_and_nickname(affected_player,affected_player_nickname)
+    started = line[3]
+    
+    # mark who started what on this pokemon
+    affected_player_pokemon.startBy[started] = lastMovePoke # type: ignore
+
+# Used to track which mon set a side condition (i.e. hazards) on a affected players side  
+def check_side_start(line):
+    global sideStarted
+    
+    player = get_player_from_side_start(line[2])
+    effect = get_effect_from_side_start(line[3])
+    
+    if player not in sideStarted:
+        sideStarted[player] = {}
+        
+    sideStarted[player][effect] = lastMovePoke
 
 # Assign Winner based on line
 # |win|Sixteen Gremlins
@@ -368,6 +391,14 @@ def get_other_player(player):
     else:
         return 'p1'
 
+# get the player which set the side start effect (like hazards)    
+def get_player_from_side_start(segment):
+    return segment.split(": ")[0]
+
+# get the effect of the sidestart (such as Stealth Rock, Spikes, Tailwind, etc.)
+def get_effect_from_side_start(segment):
+    return segment.split(": ")[1]
+
 # Main Script runs here
 if battle_log:
     logs = split_battle_log(battle_log) 
@@ -441,5 +472,15 @@ if battle_log:
                     # the only case we know so far of this header is for trick/switcheroo
                     # which is relevant when Kevin inevitably Klutz Switcheroo's a flame orb
                     check_activate(line)
+                    
+                # start relates to any volatile status, such as confusion, perish song, substitute, leech seed, etc.
+                # all volatile statuses can be found at https://bulbapedia.bulbagarden.net/wiki/Status_condition#Volatile_status
+                case '-start':
+                    check_start(line)
+                
+                # sidestart relates to all effects that affect one side of the field (tailwind, hazards, screens)
+                # TODO: -swapsideconditions is a header that swaps side conditions between sides, used for court change 
+                case '-sidestart':
+                    check_side_start(line)
 
     print(pokes)
