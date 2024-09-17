@@ -20,6 +20,7 @@ class Pokemon:
         self.kills = 0
         self.fainted = False
         self.damage_done = 0
+        self.healing_done = 0
         self.statuses_inflicted = 0
         # Trick / Switcheroo nonsense
         self.switched_item_previous_owner = None
@@ -73,7 +74,7 @@ turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
 # TODO: Need update replays for the first 6 tests that use external replay and not user-perspective based replays
-file_path = 'Replays\Test 2 -- indirect damage kills.html'
+file_path = 'Replays\Test 12 -- Healing Bonanza.html'
 
 # Get the battle log from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -329,6 +330,23 @@ def check_side_start(line):
         
     sideStarted[player][effect] = lastMovePoke
 
+# Used to keep track of a pokemons hp after they have been healed    
+def check_heal(line):
+    healed_player, healed_player_nickname = get_player_and_nickname_from_line_segment(line[2])
+    healed_pokemon = get_Pokemon_by_player_and_nickname(healed_player, healed_player_nickname)
+    healer_pokemon = None
+    
+    if len(line) == 5:
+        # So far I have seen the move rest or an item lead to this case
+        # which means the healed pokemon healed itself
+        # TODO: check all ways healing can be done
+        healer_pokemon = healed_pokemon
+    else:
+        # if that was not the case, then the last move is what healed the pokemon
+        healer_pokemon = lastMovePoke
+    
+    calculate_heal(healed_pokemon, healer_pokemon, line[3])
+
 # Assign Winner based on line
 # |win|Sixteen Gremlins
 def assign_winner(line):
@@ -364,6 +382,27 @@ def calculate_faint_damage(dead_mon,killer_mon):
     
     # For fun
     dead_mon.hp = 0
+
+# Calculate the hp that was healed and set the healed mon to their new hp stat
+# TODO: only tested pollen puff, rest, life dew, heal pulse, and sitrus berry
+# Need to test lefties, shell bell, aqua ring, floral healing, grassy terrain, healing wish
+# ingrain, jungle healing, leech seed, lunar dance, pain split, revival blessing, wish, hp draining moves
+# (and present if we're really crazy)
+# Also need to check that 
+def calculate_heal(healed_pokemon, healer_pokemon, health_segment):
+    #Get the New HP
+    new_hp = int(health_segment.split("\\/")[0])
+    
+    
+    amount_healed = new_hp - healed_pokemon.hp
+    
+    # check to that the healer and healed mon are on the same team, healing should only be credited
+    # if self-inflicted or by a teammate
+    if(check_if_on_same_team(healed_pokemon, healer_pokemon)):
+        healer_pokemon.healing_done += amount_healed
+
+    # For Serious
+    healed_pokemon.hp = new_hp
 
 
 # Sets the current HP of the Pokemon Object
@@ -522,5 +561,8 @@ if battle_log:
                 # TODO: -swapsideconditions is a header that swaps side conditions between sides, used for court change 
                 case '-sidestart':
                     check_side_start(line)
+                    
+                case '-heal':
+                    check_heal(line)
 
     print(pokes)
