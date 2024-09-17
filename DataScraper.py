@@ -73,7 +73,7 @@ turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
 # TODO: Need update replays for the first 6 tests that use external replay and not user-perspective based replays
-file_path = 'Replays\Test 11 -- Volatile statuses (leech seed and confusion).html'
+file_path = 'Replays\Test 2 -- indirect damage kills.html'
 
 # Get the battle log from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -157,7 +157,7 @@ def check_damage(line):
                 match damaging_move:
                     case "brn" | "psn":
                         attacking_pokemon = target_pokemon.statusBy # type: ignore
-                    case "sandstorm" | "hail":
+                    case "sandstorm" | "hail" | "Sandstorm" | "Hail":
                         attacking_pokemon = currentWeatherSetter
                     case _:
                         # Not status nor weather...
@@ -180,7 +180,7 @@ def check_damage(line):
             killer_mon = attacking_pokemon
             killer_mon.kills += 1 # type: ignore
             #Calculate Damage Done -- case changes if they fainted cause you cannot divide by zero :)
-            calculate_faint_damage(target_pokemon,killer_mon)
+            calculate_faint_damage(target_pokemon, killer_mon)
     
     # Check Damage if the Mon didn't faint TODO: Edge Cases, dear god the edge cases
     else:
@@ -193,37 +193,38 @@ def check_damage(line):
         # time to find what caused damage
         else:
             from_source = line[4]
-            from_source = from_source.replace("[from] ", "")
+            from_source = (from_source.replace("[from] ", ""))
             
             match from_source:
                 case "brn" | "psn":
                     damaging_mon = target_pokemon.statusBy # type: ignore
                     hp_segment = line[3]
-                case "sandstorm" | "hail":
-                        print("TBD")
+                case "sandstorm" | "hail" | "Sandstorm" | "Hail":
+                    damaging_mon = currentWeatherSetter
+                    hp_segment = line[3]
                 case _:
                     # Not status nor weather...
                     # Check side starts
                     side_start_result = sideStarted.get(player, {}).get(from_source, None)
                         
                     if side_start_result is not None:
-                        print("TBD")
+                        damaging_mon = side_start_result
+                        hp_segment = line[3]
                     else:
                         # Check starts
                         start_result = target_pokemon.startBy.get(from_source, None) # type: ignore
                         
                         if start_result is not None:
-                            attacking_pokemon = start_result
-                            damaging_mon = attacking_pokemon
+                            damaging_mon = start_result
                             hp_segment = line[3]
                         else:
-                            attacking_pokemon = target_pokemon
+                            damaging_mon = target_pokemon
         # check first if the damage was not performed by self-infliction or teammate
-        if not check_if_on_same_team(attacking_pokemon, player):
+        if not check_if_on_same_team(damaging_mon, player):
             calculate_damage(target_pokemon, damaging_mon, hp_segment)
         else:
             # need to still update health if it was friendly fire
-            print("TBD")
+            calculate_damage(target_pokemon, None, hp_segment)
 
 def check_move(line):
     global lastMovePoke, lastMoveUsed
@@ -348,8 +349,9 @@ def calculate_damage(target_mon,attacking_mon,damage_seg):
     #Get the New HP
     new_hp = int(damage_seg.split("\\/")[0])
     
-    damage = target_mon.hp - new_hp
-    attacking_mon.damage_done += damage
+    if attacking_mon is not None:
+        damage = target_mon.hp - new_hp
+        attacking_mon.damage_done += damage
 
     # For Serious
     target_mon.hp = new_hp
