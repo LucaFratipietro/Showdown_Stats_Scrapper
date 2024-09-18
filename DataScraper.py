@@ -93,7 +93,7 @@ turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
 # TODO: Need update replays for the first 6 tests that use external replay and not user-perspective based replays
-file_path = 'Replays\Test 14 -- draining moves, lunar blessing and dance, pain split, regenerator, floral healing, revival blessing.html'
+file_path = 'Replays\Test 16 -- Healing Abilities Bonanza (all but regen).html'
 
 # Get the battle log from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -417,7 +417,7 @@ def check_side_start(line):
 # leftovers, shell bell, aqua ring, grassy terrain, healing wish (known bug when multiple mons use at same time),
 # floral healing, draining moves, lunar dance, revival blessing, ingrain and jungle healing
 # FOR REGENERATOR: Is a switch case, check switch in main script and check_regenerator method
-# FOR PAIN SPLI: Pain split is a sethp case, check sethp in main script and check_set_hp method
+# FOR PAIN SPLIT: Pain split is a sethp case, check sethp in main script and check_set_hp method
 # Need to test present if we're really crazy)
 def check_heal(line):
     global lastLeechSeeder, lastHealingWisher, lastLunarDancer, lastRevivalBlesser
@@ -444,7 +444,15 @@ def check_heal(line):
             lastRevivalBlesser = None
         # check next if heal is from grassy terrain
         elif line[4] == '[from] Grassy Terrain':
-            healer_pokemon = currentWeatherSetter
+            healer_pokemon = currentTerrainSetter
+        # check healing ability
+        elif '[from] ability' in line[4]:
+            # if cheek pouch and poison heal are not the abilities, then it is a weather healing ability
+            # ex: rain dish, dry skin, ice body
+            if 'Cheek Pouch' not in line[4] and 'Poison Heal' not in line[4]:
+                healer_pokemon = currentWeatherSetter
+            else:
+                healer_pokemon = healed_pokemon
         # Leech seed has a weird property, so we store the last recorded leech seeder
         elif lastLeechSeeder is not None:
             healer_pokemon = lastLeechSeeder
@@ -452,16 +460,24 @@ def check_heal(line):
         # If not, berry/rest/aqua ring/lefties works like this
         else:
             healer_pokemon = healed_pokemon
-    # so far this is the case for wish passing, drain moves, and shell bell for some reason, 
+    # so far this is the case for wish passing, drain moves, absorbing abilities, and shell bell for some reason 
     elif line_length == 6:
+        # first check for wish passing
         if "[wisher]" in line[5]:
             # the last index stores the mon that passed the wish (yippee)
             wisher_nickname = line[5].split("[wisher] ")[1]
             # we get the healer from its nickname and the player of the healed pokemon
             # (I dont think there is any way to wish pass to an opponent)
             healer_pokemon = get_Pokemon_by_player_and_nickname(healed_player, wisher_nickname)
-            
-        # So far only for shell bell and drain moves, the fifth index says which mon you damage which is irrelevant
+        
+        # then check for absorbing abilities like volt absorb, earth eater or dry skin
+        if "[from] ability" in line[4]:
+            # have to remove the of to get the player and nickname
+            # line[5] looks something like this: [of] p1a: Pelipper
+            remove_of = line[5].replace("[of] ", "")
+            healer_player, healer_nickname = get_player_and_nickname_from_line_segment(remove_of)
+            healer_pokemon = get_Pokemon_by_player_and_nickname(healer_player, healer_nickname)
+        # So far this case is only for shell bell and drain moves, the fifth index says which mon you damaged which is irrelevant
         # only drain moves tested were giga drain and drain punch
         else:
             healer_pokemon = healed_pokemon
