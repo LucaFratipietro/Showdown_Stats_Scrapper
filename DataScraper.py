@@ -22,16 +22,20 @@ class Pokemon:
         self.damage_done = 0
         self.healing_done = 0
         self.statuses_inflicted = 0
+        self.betrayals = 0
         # Trick / Switcheroo nonsense
         self.switched_item_previous_owner = None
+        # track if this is the pokemons first turn switching in
+        # necessary for setting initial hp and tracking regenerator healing
+        self.is_first_turn = True
 
     def __str__(self):
             return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
-            \n Damage Done: {self.damage_done} \n Volatile Statuses: {self.startBy} \n'
+            \n Damage Done: {self.damage_done} \n Healing done: {self.healing_done} \n'
         
     def __repr__(self):
             return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
-            \n Damage Done: {self.damage_done} \n Volatile Statuses: {self.startBy} \n'
+            \n Damage Done: {self.damage_done} \n Healing done: {self.healing_done} \n'
 
 # Function to open and parse the HTML file
 def parse_html_script(file_path):
@@ -63,18 +67,33 @@ sideStarted = {}
 lastSwitchedPoke = ""
 # Pokemon Object
 currentWeatherSetter = None
+currentTerrainSetter = None
 weatherMove = 0
 
 # Flags to print things once if there's something to review
 seenFirstWeather = False
 seenReplace = False
 
+# Track last damage by a leech seed mon to see who gets the heal
+lastLeechSeeder = None
+
+# Track last Lunar Dance User (luckily this can only be Cresselia, so doesnt have the same niche issue as healing wish)
+lastLunarDancer = None
+
+# Track last mon that used healing wish
+# TODO: Find a better solution?
+# this technically doesn't work if healing wish is clicked by multiple mons in the same turn, but what are the odds?
+lastHealingWisher = None
+
+# Track last revival blessing user, has same issue as healing wish
+lastRevivalBlesser = None
+
 # Turn counter, mostly for detailed results and debugging
 turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
 # TODO: Need update replays for the first 6 tests that use external replay and not user-perspective based replays
-file_path = 'Replays\Test 12 -- Healing Bonanza.html'
+file_path = 'Replays\Test 14 -- draining moves, lunar blessing and dance, pain split, regenerator, floral healing, revival blessing.html'
 
 # Get the battle log from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -116,11 +135,26 @@ def grab_nickname(line):
     nickname_pokemon.nickname = nickname
 
     #Assign initial hp value
-    set_hp(line[4],nickname_pokemon)
+    if nickname_pokemon.is_first_turn:
+        set_hp(line[4],nickname_pokemon)
+        nickname_pokemon.is_first_turn = False    
 
-# REMINDER: DO NOT INCREMENT MURDER COUNTER IF TEAMMATE WAS KILLED (or add a betrayal count)
+def check_regenerator(line):
+    player, nickname = get_player_and_nickname_from_line_segment(line[2])
+    mon = get_Pokemon_by_player_and_nickname(player, nickname)
+    
+    logged_hp = int(line[4].split("\\/")[0])
+    
+    if mon.hp != logged_hp and not mon.is_first_turn: # type: ignore
+        print("WEEE WOOO WEEE WOOO WE HAVE A CRINGE REGEN STALL MON")
+        mon.healing_done += logged_hp - mon.hp # type: ignore
+        mon.hp = logged_hp # type: ignore
+    
+
+# oof this is a big boy
+# handles all the possible damage calculations in order to make damage tracking possible
 def check_damage(line):
-    global lastMoveUsed, lastMovePoke
+    global lastMoveUsed, lastMovePoke, lastLeechSeeder
 
     # Get the attacked/dead pokemon from the player and the mons nickname
     player, nickname = get_player_and_nickname_from_line_segment(line[2])
@@ -138,16 +172,16 @@ def check_damage(line):
         
         if (len(line) > 4):
             # a kill from indirect damage
-            fromSource = line[4]
-            fromSource = fromSource.replace("[from] ", "")
-            damaging_move = fromSource
+            from_source = line[4]
+            from_source = from_source.replace("[from] ", "")
+            damaging_move = from_source
             
             # Recoil is attributed to the opposing poke. Yeah, I know.
             # If it's recoil, it's a self-kill, so drop down
             if len(line) > 5 and damaging_move != "recoil":
                 # We have a "[of]" for attribution of the kill! Hooray!
-                ofSource = line[5]
-                ofSource = ofSource.replace("[of] ", "")
+                of_source = line[5]
+                of_source = of_source.replace("[of] ", "")
                 # killer_player, killer_nickname = get_player_and_nickname_from_line_segment(ofSource)
                 # attacking_pokemon = get_Pokemon_by_player_and_nickname(killer_player, killer_nickname)
             else:
@@ -163,16 +197,19 @@ def check_damage(line):
                     case _:
                         # Not status nor weather...
                         # Check side starts
-                        side_start_result = sideStarted.get(player, {}).get(fromSource, None)
+                        side_start_result = sideStarted.get(player, {}).get(from_source, None)
                         
                         if side_start_result is not None:
                             attacking_pokemon = side_start_result
                         else:
                             # Check starts
-                            start_result = target_pokemon.startBy.get(fromSource, None) # type: ignore
+                            start_result = target_pokemon.startBy.get(from_source, None) # type: ignore
                             
                             if start_result is not None:
                                 attacking_pokemon = start_result
+                                
+                                if from_source == 'Leech Seed':
+                                    lastLeechSeeder = attacking_pokemon
                             else:
                                 attacking_pokemon = target_pokemon
         
@@ -182,6 +219,10 @@ def check_damage(line):
             killer_mon.kills += 1 # type: ignore
             #Calculate Damage Done -- case changes if they fainted cause you cannot divide by zero :)
             calculate_faint_damage(target_pokemon, killer_mon)
+            
+        # if the killer was on the same team its a betrayal
+        else:
+            attacking_pokemon.betrayals += 1 # type: ignore
     
     # Check Damage if the Mon didn't faint TODO: Edge Cases, dear god the edge cases
     else:
@@ -218,8 +259,12 @@ def check_damage(line):
                         if start_result is not None:
                             damaging_mon = start_result
                             hp_segment = line[3]
+                            
+                            if from_source == 'Leech Seed':
+                                lastLeechSeeder = damaging_mon
                         else:
                             damaging_mon = target_pokemon
+                            hp_segment = line[3]
         # check first if the damage was not performed by self-infliction or teammate
         if not check_if_on_same_team(damaging_mon, player):
             calculate_damage(target_pokemon, damaging_mon, hp_segment)
@@ -228,21 +273,39 @@ def check_damage(line):
             calculate_damage(target_pokemon, None, hp_segment)
 
 def check_move(line):
-    global lastMovePoke, lastMoveUsed
+    global lastMovePoke, lastMoveUsed, lastHealingWisher, lastLunarDancer, lastRevivalBlesser
     # get the mons player and nickname
     a_player, a_nickname = get_player_and_nickname_from_line_segment(line[2])
 
     #Store move info as a global to track damage and other stats with
     lastMovePoke = get_Pokemon_by_player_and_nickname(a_player, a_nickname)
     lastMoveUsed = line[3]
+    
+    # check if the move used was healing wish (needed for tracking healing)
+    if lastMoveUsed == "Healing Wish":
+        lastHealingWisher = lastMovePoke
+    
+    # check if the move used was lunar dance (needed for tracking healing)
+    if lastMoveUsed == "Lunar Dance":
+        lastLunarDancer = lastMovePoke
+    
+    # check if the move used was revival blessing (needed for tracking healing)    
+    if lastMoveUsed == "Revival Blessing":
+        lastRevivalBlesser = lastMovePoke
 
     print(lastMovePoke.nickname, lastMoveUsed) # type: ignore
 
 # stores the mon that set the weather manually, like sunny day or rain dance
-# the weather header will directly follow the move being used, so we just store teh last move poke
+# the weather header will directly follow the move being used, so we just store the last move poke
 def check_manual_weather_setter():
     global currentWeatherSetter
     currentWeatherSetter = lastMovePoke
+
+# stores the mon that set the terrain manually, like the move misty terrain
+# the field start header will directly follow the move being used, so we just store teh last move poke    
+def check_manual_terrain_setter():
+    global currentTerrainSetter
+    currentTerrainSetter = lastMovePoke
 
 # stores the mon that set the weather via an ability on entry, like drought or drizzle
 def check_ability_weather_setter(line):
@@ -262,6 +325,25 @@ def check_ability_weather_setter(line):
         split_of_source[1] = nickname
         
     currentWeatherSetter = get_Pokemon_by_player_and_nickname(split_of_source[0][:2], split_of_source[1])
+
+# stores the mon that set the terrain via an ability on entry, like grassy surge    
+def check_ability_terrain_setter(line):
+    global currentTerrainSetter
+    
+    of_source = line[4]
+    of_source = of_source.replace("[of] ", "")
+    split_of_source = of_source.split(": ")
+    
+    if len(split_of_source) > 2:
+        # WHO NICKNAMES MONS WITH :
+        nickname = ''
+        for i in range(1, len(split_of_source)):
+            nickname += split_of_source[i]
+            if i != len(split_of_source) - 1:
+                nickname += ':'
+        split_of_source[1] = nickname
+        
+    currentTerrainSetter = get_Pokemon_by_player_and_nickname(split_of_source[0][:2], split_of_source[1])
 
 # Status Case
 # Example Line: |-status|p1a: Nuke|tox --> Nuke has been Toxiced, check lastMoveMon to credit the mon who inflicted them
@@ -331,21 +413,70 @@ def check_side_start(line):
     sideStarted[player][effect] = lastMovePoke
 
 # Used to keep track of a pokemons hp after they have been healed    
+# TODO: only tested pollen puff, rest, life dew, heal pulse, berry, aqua ring, wish,
+# leftovers, shell bell, aqua ring, grassy terrain, healing wish (known bug when multiple mons use at same time),
+# floral healing, draining moves, lunar dance, revival blessing
+# FOR REGENERATOR: Is a switch case, check switch in main script and check_regenerator method
+# Need to test ingrain, jungle healing, pain split
+# (and present if we're really crazy)
+# Also need to check that 
 def check_heal(line):
+    global lastLeechSeeder, lastHealingWisher, lastLunarDancer, lastRevivalBlesser
+    
     healed_player, healed_player_nickname = get_player_and_nickname_from_line_segment(line[2])
     healed_pokemon = get_Pokemon_by_player_and_nickname(healed_player, healed_player_nickname)
     healer_pokemon = None
     
-    if len(line) == 5:
-        # So far I have seen the move rest or an item lead to this case
-        # which means the healed pokemon healed itself
-        # TODO: check all ways healing can be done
-        healer_pokemon = healed_pokemon
+    line_length = len(line)
+    # This is the general case when healing was done by a unique move (think leech seed, berry, rest)
+    if line_length == 5:
+        # check first is the heal was from healing wish, since healing wish does not store the wish passer for some reason
+        if line[4] == '[from] move: Healing Wish':
+            healer_pokemon = lastHealingWisher
+            lastHealingWisher = None
+        # similarly check for lunar dance
+        elif line[4] == '[from] move: Lunar Dance':
+            healer_pokemon = lastLunarDancer
+            lastLunarDancer = None
+        # similarly check for revival blessing
+        elif line[4] == '[from] move: Revival Blessing':
+            healed_pokemon.fainted = False # type: ignore
+            healer_pokemon = lastRevivalBlesser
+            lastRevivalBlesser = None
+        # check next if heal is from grassy terrain
+        elif line[4] == '[from] Grassy Terrain':
+            healer_pokemon = currentWeatherSetter
+        # Leech seed has a weird property, so we store the last recorded leech seeder
+        elif lastLeechSeeder is not None:
+            healer_pokemon = lastLeechSeeder
+            lastLeechSeeder = None
+        # If not, berry/rest/aqua ring/lefties works like this
+        else:
+            healer_pokemon = healed_pokemon
+    # so far this is the case for wish passing, drain moves, and shell bell for some reason, 
+    elif line_length == 6:
+        if "[wisher]" in line[5]:
+            # the last index stores the mon that passed the wish (yippee)
+            wisher_nickname = line[5].split("[wisher] ")[1]
+            # we get the healer from its nickname and the player of the healed pokemon
+            # (I dont think there is any way to wish pass to an opponent)
+            healer_pokemon = get_Pokemon_by_player_and_nickname(healed_player, wisher_nickname)
+            
+        # So far only for shell bell and drain moves, the fifth index says which mon you damage which is irrelevant
+        # only drain moves tested were giga drain and drain punch
+        else:
+            healer_pokemon = healed_pokemon
     else:
         # if that was not the case, then the last move is what healed the pokemon
         healer_pokemon = lastMovePoke
     
     calculate_heal(healed_pokemon, healer_pokemon, line[3])
+
+def check_faint(line):
+    fainted_player, fainted_player_nickname = get_player_and_nickname_from_line_segment(line[2])
+    fainted_pokemon = get_Pokemon_by_player_and_nickname(fainted_player, fainted_player_nickname)
+    fainted_pokemon.fainted = True # type: ignore
+    fainted_pokemon.hp = 0 # type: ignore
 
 # Assign Winner based on line
 # |win|Sixteen Gremlins
@@ -384,27 +515,24 @@ def calculate_faint_damage(dead_mon,killer_mon):
     dead_mon.hp = 0
 
 # Calculate the hp that was healed and set the healed mon to their new hp stat
-# TODO: only tested pollen puff, rest, life dew, heal pulse, and sitrus berry
-# Need to test lefties, shell bell, aqua ring, floral healing, grassy terrain, healing wish
-# ingrain, jungle healing, leech seed, lunar dance, pain split, revival blessing, wish, hp draining moves
-# (and present if we're really crazy)
-# Also need to check that 
 def calculate_heal(healed_pokemon, healer_pokemon, health_segment):
     #Get the New HP
     new_hp = int(health_segment.split("\\/")[0])
-    
-    
     amount_healed = new_hp - healed_pokemon.hp
+    
+    healer_pokemon_team = 'p1'
+    if healer_pokemon.nickname not in pokes[healer_pokemon_team]:
+        healer_pokemon_team = 'p2'
     
     # check to that the healer and healed mon are on the same team, healing should only be credited
     # if self-inflicted or by a teammate
-    if(check_if_on_same_team(healed_pokemon, healer_pokemon)):
+    if(check_if_on_same_team(healed_pokemon, healer_pokemon_team)):
         healer_pokemon.healing_done += amount_healed
 
     # For Serious
     healed_pokemon.hp = new_hp
 
-
+# TODO: remove set hp because it will always default to 100 now
 # Sets the current HP of the Pokemon Object
 # Variable Types -- health : str, Pokemon : Pokemon(Object)
 # Health Example: '100\\/100'
@@ -507,6 +635,10 @@ if battle_log:
                 # Replace is literally just for Zoroark
                 case 'switch' | 'drag' | 'replace':
                     grab_nickname(line)
+                    
+                    # REGENERATOR IS NOT A HEAL (WHY??????)
+                    # IT HAPPENS ON SWITCH, SO EVERY SWITCH NEED TO CHECK IF HP CHANGED (BLACK PILLED)
+                    check_regenerator(line)
 
                 #Detect Damage -- if a pokemon does damage, record it
                 case '-damage':
@@ -561,8 +693,30 @@ if battle_log:
                 # TODO: -swapsideconditions is a header that swaps side conditions between sides, used for court change 
                 case '-sidestart':
                     check_side_start(line)
-                    
+                
+                # case related to all healing moves and items (drain moves, recover variants, leech seed, leftovers, berries, etc)    
                 case '-heal':
                     check_heal(line)
-
+                
+                # case related to when a pokemon faints after using a move (so far have only seen Healing Wish)
+                # TODO: test destiny bond and perish song
+                case 'faint':
+                    check_faint(line)
+                
+                # case related to setting a terrain    
+                case '-fieldstart':
+                    
+                    # |-fieldstart|move: Misty Terrain --> terrain set manually
+                    # If it 3 parts long, this means terrain was just set manually
+                    if len(line) == 3:
+                        # record who set the weather on which team
+                        check_manual_terrain_setter()
+                    
+                    #|-fieldstart|move: Grassy Terrain|[from] ability: Grassy Surge|[of] p2a: Rillaboom --> terrain set by ability on entry
+                    # If it is 5 parts long, then weather was set by an ability
+                    else:
+                        check_ability_terrain_setter(line)
+                
+                case 'turn':
+                    turn += 1
     print(pokes)
