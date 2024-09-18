@@ -415,11 +415,10 @@ def check_side_start(line):
 # Used to keep track of a pokemons hp after they have been healed    
 # TODO: only tested pollen puff, rest, life dew, heal pulse, berry, aqua ring, wish,
 # leftovers, shell bell, aqua ring, grassy terrain, healing wish (known bug when multiple mons use at same time),
-# floral healing, draining moves, lunar dance, revival blessing
+# floral healing, draining moves, lunar dance, revival blessing, ingrain and jungle healing
 # FOR REGENERATOR: Is a switch case, check switch in main script and check_regenerator method
-# Need to test ingrain, jungle healing, pain split
-# (and present if we're really crazy)
-# Also need to check that 
+# FOR PAIN SPLI: Pain split is a sethp case, check sethp in main script and check_set_hp method
+# Need to test present if we're really crazy)
 def check_heal(line):
     global lastLeechSeeder, lastHealingWisher, lastLunarDancer, lastRevivalBlesser
     
@@ -472,11 +471,49 @@ def check_heal(line):
     
     calculate_heal(healed_pokemon, healer_pokemon, line[3])
 
+# Used to set mons to faint during moves that auto-faint, like healing wish
 def check_faint(line):
     fainted_player, fainted_player_nickname = get_player_and_nickname_from_line_segment(line[2])
     fainted_pokemon = get_Pokemon_by_player_and_nickname(fainted_player, fainted_player_nickname)
     fainted_pokemon.fainted = True # type: ignore
     fainted_pokemon.hp = 0 # type: ignore
+    
+
+# Method that handles -sethp headers
+def check_set_hp(line):
+    if '[from]' in line[4]:
+        from_source = line[4].split("[from] ")[1]
+        
+        #so far only known case of this header is pain split
+        if from_source == 'move: Pain Split':
+            # when the line has length six, it refers to the mon targeted by pain split
+            if len(line) == 6:
+                targeted_player, targeted_nickname = get_player_and_nickname_from_line_segment(line[2])
+                targeted_mon = get_Pokemon_by_player_and_nickname(targeted_player, targeted_nickname)
+                # the mon that used pain split will be the last move mon
+                attacking_mon = lastMovePoke
+                
+                # check the hp stat of the targeted mon
+                new_hp = int(line[3].split("\\/")[0])
+                # check if the targeted_mon's hp went down, if it did, credit the attacking mon with damage
+                if new_hp < targeted_mon.hp: # type: ignore
+                    calculate_damage(targeted_mon, attacking_mon, line[3])
+                # else, just update the targeted_mon's hp
+                else:
+                    targeted_mon.hp = new_hp # type: ignore
+            # This is the mon using pain split
+            else:
+                # the mon that used pain split will be the last move mon
+                pain_split_user = lastMovePoke
+                
+                # check the hp stat of the targeted mon
+                new_hp = int(line[3].split("\\/")[0])
+                # check if the pain split users's hp went up, if it did, credit the mon with healing
+                if new_hp > pain_split_user.hp: # type: ignore
+                    calculate_heal(pain_split_user, pain_split_user, line[3])
+                # else, just update the targeted_mon's hp
+                else:
+                    pain_split_user.hp = new_hp # type: ignore
 
 # Assign Winner based on line
 # |win|Sixteen Gremlins
@@ -716,7 +753,12 @@ if battle_log:
                     # If it is 5 parts long, then weather was set by an ability
                     else:
                         check_ability_terrain_setter(line)
-                
+                # This is seen in cases where hp is directly set, like in pain split
+                # Example: mon targeted by pains plit --> |-sethp|p1a: Pawmot|100\/100|[from] move: Pain Split|[silent]
+                # Example: mon using pain split --> |-sethp|p2b: Calyrex|73\/100|[from] move: Pain Split
+                case '-sethp':
+                    check_set_hp(line)
+                # just a turn counter lol, could be useful for debugging
                 case 'turn':
                     turn += 1
     print(pokes)
