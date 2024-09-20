@@ -93,7 +93,7 @@ turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
 # TODO: Need update replays for the first 6 tests that use external replay and not user-perspective based replays
-file_path = 'Replays\Test 16 -- Healing Abilities Bonanza (all but regen).html'
+file_path = 'Replays\First Real Game -- LucaTony vs IGA.html'
 
 # Get the battle log from the html file
 battle_log = parse_html_script(file_path)[0]
@@ -130,7 +130,9 @@ def grab_nickname(line):
 
     species = line[3].split(",")[0]
 
-    #Assign the Nickname to the right pokemon Pokemon
+    #Assign the Nickname to the right pokemon 
+    if(species == 'Zamazenta'):
+        species = 'Zamazenta-*'
     nickname_pokemon = pokes[player][species]
     nickname_pokemon.nickname = nickname
 
@@ -330,20 +332,21 @@ def check_ability_weather_setter(line):
 def check_ability_terrain_setter(line):
     global currentTerrainSetter
     
-    of_source = line[4]
-    of_source = of_source.replace("[of] ", "")
-    split_of_source = of_source.split(": ")
+    if (len(line) > 4):
+        of_source = line[4]
+        of_source = of_source.replace("[of] ", "")
+        split_of_source = of_source.split(": ")
     
-    if len(split_of_source) > 2:
-        # WHO NICKNAMES MONS WITH :
-        nickname = ''
-        for i in range(1, len(split_of_source)):
-            nickname += split_of_source[i]
-            if i != len(split_of_source) - 1:
-                nickname += ':'
-        split_of_source[1] = nickname
+        if len(split_of_source) > 2:
+            # WHO NICKNAMES MONS WITH :
+            nickname = ''
+            for i in range(1, len(split_of_source)):
+                nickname += split_of_source[i]
+                if i != len(split_of_source) - 1:
+                    nickname += ':'
+            split_of_source[1] = nickname
         
-    currentTerrainSetter = get_Pokemon_by_player_and_nickname(split_of_source[0][:2], split_of_source[1])
+        currentTerrainSetter = get_Pokemon_by_player_and_nickname(split_of_source[0][:2], split_of_source[1])
 
 # Status Case
 # Example Line: |-status|p1a: Nuke|tox --> Nuke has been Toxiced, check lastMoveMon to credit the mon who inflicted them
