@@ -1,4 +1,4 @@
-healing
+healing -> DONE FOR NOW
 Tricking barb, flame orb and toxic orb
 Spikes damage from ceaseless edge and stone axe
 court change
@@ -6,10 +6,11 @@ encoring ghost into curse
 Fling variations (damage, status, etc)
 drain move into liquid ooze
 high jump kick and jump kick
-the 1.5x damage of helping hand being assigned to the support mon, or how sunny day affects damage and synthesis
+the 1.5x damage of helping hand being assigned to the support mon -> Done when one team uses helping hand, need to check for both teams
+similar to helping hand, crediting terrain or weather setters for terrain boosted/weather boosted moves -> Damaging mon gets full credit
 destiny bond, trapping moves
 clangorous soul
 other unique abilities like aftermath, innards out, iron barbs, rough skin, liquid ooze, toxic debris, solar power
 rocky helmet
 Jaboca and Rowap berry
-Revival blessing
+Revival blessing -> Done but needs more testing like healing wish

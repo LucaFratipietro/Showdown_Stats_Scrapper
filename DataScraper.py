@@ -8,8 +8,9 @@ class Player:
 
 
 class Pokemon:
-    def __init__(self, species="null"):
+    def __init__(self, species, team):
         self.species = species
+        self.team = team
         self.hp = 0
         self.max_hp = -1
         self.nickname = "null"
@@ -51,7 +52,6 @@ def parse_html_script(file_path):
 
         return scripts
 
-    
 # List of trainers
 players = []
 # Dictionary of Pokémon indexed by trainer
@@ -88,6 +88,12 @@ lastHealingWisher = None
 # Track last revival blessing user, has same issue as healing wish
 lastRevivalBlesser = None
 
+# Track Helping Hand Users for damage calculations
+lastHelpingHandUser = {
+    'p1': None,
+    'p2': None
+}
+
 # Turn counter, mostly for detailed results and debugging
 turn = 0
 
@@ -113,9 +119,17 @@ def assign_pokemon(pokemon_line):
     # Grab the Player
     owned_by = pokemon_line[2]
     species = pokemon_line[3].split(",")[0]
+    
+    # Fix Zamazenta's species name for later use
+    if species == 'Zamazenta-*' or species == 'Zamazenta-Crowned':
+        species = 'Zamazenta'
 
+    # TODO: Need to test Zacian
+    if species == 'Zacian-*' or species == 'Zacian-Crowned':
+        species = 'Zacian'
+        
     #Assign the pokemon to each player
-    nxt_poke = Pokemon(species=species)
+    nxt_poke = Pokemon(species=species, team=owned_by)
     if owned_by in pokes:
         pokes[owned_by][species] = nxt_poke
     else:
@@ -131,8 +145,6 @@ def grab_nickname(line):
     species = line[3].split(",")[0]
 
     #Assign the Nickname to the right pokemon 
-    if(species == 'Zamazenta'):
-        species = 'Zamazenta-*'
     nickname_pokemon = pokes[player][species]
     nickname_pokemon.nickname = nickname
 
@@ -275,7 +287,7 @@ def check_damage(line):
             calculate_damage(target_pokemon, None, hp_segment)
 
 def check_move(line):
-    global lastMovePoke, lastMoveUsed, lastHealingWisher, lastLunarDancer, lastRevivalBlesser
+    global lastMovePoke, lastMoveUsed, lastHealingWisher, lastLunarDancer, lastRevivalBlesser, lastHelpingHandUser
     # get the mons player and nickname
     a_player, a_nickname = get_player_and_nickname_from_line_segment(line[2])
 
@@ -294,6 +306,10 @@ def check_move(line):
     # check if the move used was revival blessing (needed for tracking healing)    
     if lastMoveUsed == "Revival Blessing":
         lastRevivalBlesser = lastMovePoke
+    
+    # check if last move used was Helping Hand    
+    if lastMoveUsed == "Helping Hand":
+        lastHelpingHandUser[a_player] = lastMovePoke
 
     print(lastMovePoke.nickname, lastMoveUsed) # type: ignore
 
@@ -556,7 +572,15 @@ def calculate_damage(target_mon,attacking_mon,damage_seg):
     
     if attacking_mon is not None:
         damage = target_mon.hp - new_hp
-        attacking_mon.damage_done += damage
+        # Check if helping hand had been used by a teammate
+        # we credit the helping hand user with the bonus damage they provided
+        if lastHelpingHandUser[attacking_mon.team] is not None:
+            non_helping_hand_damage = round(damage / 1.5)
+            attacking_mon.damage_done += non_helping_hand_damage
+            lastHelpingHandUser[attacking_mon.team].damage_done += damage - non_helping_hand_damage #type: ignore
+            lastHelpingHandUser[attacking_mon.team] = None
+        else:
+            attacking_mon.damage_done += damage
 
     # For Serious
     target_mon.hp = new_hp
@@ -564,8 +588,17 @@ def calculate_damage(target_mon,attacking_mon,damage_seg):
 # Calculate the Damage of a Mon that Fainted
 # Example Line: '0 fnt'
 # Variable Types -- dead_mon : Pokemon(Object), killer_mon : Pokemon(Object)
-def calculate_faint_damage(dead_mon,killer_mon):    
-    killer_mon.damage_done += dead_mon.hp
+def calculate_faint_damage(dead_mon,killer_mon):
+    # Check if helping hand had been used by a teammate
+    # we credit the helping hand user with the bonus damage they provided
+    if lastHelpingHandUser[killer_mon.team] is not None:
+        damage = dead_mon.hp
+        non_helping_hand_damage = round(damage / 1.5)
+        killer_mon.damage_done += non_helping_hand_damage
+        lastHelpingHandUser[killer_mon.team].damage_done += damage - non_helping_hand_damage #type: ignore
+        lastHelpingHandUser[killer_mon.team] = None
+    else:
+        killer_mon.damage_done += dead_mon.hp
     
     # For fun
     dead_mon.hp = 0
@@ -597,7 +630,7 @@ def set_hp(health,pokemon):
     hp_value = health.split("\\/")
     pokemon.hp = int(hp_value[0])
     
-    #On first set hp call, set the Max Hp of the Pokemon and never return here agiiiin
+    #On first set hp call, set the Max Hp of the Pokemon and never return here again
     if pokemon.max_hp == -1:
         pokemon.max_hp = int(hp_value[1])
 
