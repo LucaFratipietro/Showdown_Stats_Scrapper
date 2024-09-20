@@ -18,12 +18,16 @@ class Pokemon:
         self.statusBy = None
         # Used for other damaging debuffs
         self.startBy = {}
+        # basic stats
         self.kills = 0
         self.fainted = False
         self.damage_done = 0
         self.healing_done = 0
+        self.damage_tanked = 0
         self.statuses_inflicted = 0
         self.betrayals = 0
+        self.blocks_for = 0
+        self.blocks_against = 0
         # Trick / Switcheroo nonsense
         self.switched_item_previous_owner = None
         # track if this is the pokemons first turn switching in
@@ -32,12 +36,14 @@ class Pokemon:
 
     def __str__(self):
             return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
-            \n Damage Done: {self.damage_done} \n Healing done: {self.healing_done} \n'
+            \n Damage Done: {self.damage_done} \n Healing Done: {self.healing_done} \n Damage Tanked: {self.damage_tanked} \n \
+            \n Blocks For: {self.blocks_for} \n Blocks Against: {self.blocks_against} \n Betrayals: {self.betrayals} \n'
         
     def __repr__(self):
             return f'Species = {self.species} \n Nickname = {self.nickname} \n Kills {self.kills} \n Fainted {self.fainted} \n HP {self.hp} \
-            \n Damage Done: {self.damage_done} \n Healing done: {self.healing_done} \n'
-
+            \n Damage Done: {self.damage_done} \n Healing Done: {self.healing_done} \n Damage Tanked: {self.damage_tanked} \
+            \n Blocks For: {self.blocks_for} \n Blocks Against: {self.blocks_against} \n Betrayals: {self.betrayals} \n'
+            
 # Function to open and parse the HTML file
 def parse_html_script(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -163,7 +169,7 @@ def check_regenerator(line):
         print("WEEE WOOO WEEE WOOO WE HAVE A CRINGE REGEN STALL MON")
         mon.healing_done += logged_hp - mon.hp # type: ignore
         mon.hp = logged_hp # type: ignore
-    
+
 
 # oof this is a big boy
 # handles all the possible damage calculations in order to make damage tracking possible
@@ -176,6 +182,7 @@ def check_damage(line):
 
     # Figure out how mon died/took damage, first assume it was from the last move
     damaging_move = lastMoveUsed
+    direct_damage = True
     attacking_pokemon = lastMovePoke
 
     # Check if damage fainted the opponent
@@ -201,7 +208,6 @@ def check_damage(line):
             else:
                 # No "[of]", requires variable state to determine
                 # Otherwise, it's probably a self-death
-                
                 # Check status and weather
                 match damaging_move:
                     case "brn" | "psn":
@@ -234,9 +240,10 @@ def check_damage(line):
             #Calculate Damage Done -- case changes if they fainted cause you cannot divide by zero :)
             calculate_faint_damage(target_pokemon, killer_mon)
             
-        # if the killer was on the same team its a betrayal
+        # if the killer was on the same team and was a different mon its a betrayal
         else:
-            attacking_pokemon.betrayals += 1 # type: ignore
+            if target_pokemon.nickname != attacking_pokemon.nickname: #type: ignore
+                attacking_pokemon.betrayals += 1 # type: ignore
     
     # Check Damage if the Mon didn't faint TODO: Edge Cases, dear god the edge cases
     else:
@@ -248,6 +255,7 @@ def check_damage(line):
             hp_segment = line[3]
         # time to find what caused damage
         else:
+            direct_damage = False
             from_source = line[4]
             from_source = (from_source.replace("[from] ", ""))
             
@@ -281,10 +289,10 @@ def check_damage(line):
                             hp_segment = line[3]
         # check first if the damage was not performed by self-infliction or teammate
         if not check_if_on_same_team(damaging_mon, player):
-            calculate_damage(target_pokemon, damaging_mon, hp_segment)
+            calculate_damage(target_pokemon, damaging_mon, hp_segment, direct_damage)
         else:
             # need to still update health if it was friendly fire
-            calculate_damage(target_pokemon, None, hp_segment)
+            calculate_damage(target_pokemon, None, hp_segment, direct_damage)
 
 def check_move(line):
     global lastMovePoke, lastMoveUsed, lastHealingWisher, lastLunarDancer, lastRevivalBlesser, lastHelpingHandUser
@@ -532,7 +540,7 @@ def check_set_hp(line):
                 new_hp = int(line[3].split("\\/")[0])
                 # check if the targeted_mon's hp went down, if it did, credit the attacking mon with damage
                 if new_hp < targeted_mon.hp: # type: ignore
-                    calculate_damage(targeted_mon, attacking_mon, line[3])
+                    calculate_damage(targeted_mon, attacking_mon, line[3], False)
                 # else, just update the targeted_mon's hp
                 else:
                     targeted_mon.hp = new_hp # type: ignore
@@ -564,14 +572,21 @@ def assign_winner(line):
 
 # Calculate the Damage of a Mon
 # Example Line: '[11\/176]'
-# Variable Types -- dead_mon : Pokemon(Object), killer_mon : Pokemon(Object), damage_seg : str
-def calculate_damage(target_mon,attacking_mon,damage_seg):
+# Variable Types -- dead_mon : Pokemon(Object), killer_mon : Pokemon(Object), damage_seg : str, direct_damage: bool
+def calculate_damage(target_mon,attacking_mon,damage_seg, direct_damage):
 
     #Get the New HP
     new_hp = int(damage_seg.split("\\/")[0])
     
     if attacking_mon is not None:
         damage = target_mon.hp - new_hp
+        
+        # Check if the damage done was less than 25%, this constitutes a block
+        # blocks only come from direct damage (it would be weird if every 6% burn damage was considered a block)
+        if damage <= 25 and direct_damage:
+            target_mon.blocks_for += 1
+            attacking_mon.blocks_against += 1
+            
         # Check if helping hand had been used by a teammate
         # we credit the helping hand user with the bonus damage they provided
         if lastHelpingHandUser[attacking_mon.team] is not None:
@@ -581,6 +596,8 @@ def calculate_damage(target_mon,attacking_mon,damage_seg):
             lastHelpingHandUser[attacking_mon.team] = None
         else:
             attacking_mon.damage_done += damage
+        
+        target_mon.damage_tanked += damage
 
     # For Serious
     target_mon.hp = new_hp
@@ -589,10 +606,10 @@ def calculate_damage(target_mon,attacking_mon,damage_seg):
 # Example Line: '0 fnt'
 # Variable Types -- dead_mon : Pokemon(Object), killer_mon : Pokemon(Object)
 def calculate_faint_damage(dead_mon,killer_mon):
+    damage = dead_mon.hp
     # Check if helping hand had been used by a teammate
     # we credit the helping hand user with the bonus damage they provided
     if lastHelpingHandUser[killer_mon.team] is not None:
-        damage = dead_mon.hp
         non_helping_hand_damage = round(damage / 1.5)
         killer_mon.damage_done += non_helping_hand_damage
         lastHelpingHandUser[killer_mon.team].damage_done += damage - non_helping_hand_damage #type: ignore
