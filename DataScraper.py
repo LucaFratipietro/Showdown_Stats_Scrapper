@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+from gSheetsManager import updateSheet
 
 class Player:
     def __init__(self, position="null", name="null", win="null"):
@@ -823,7 +824,7 @@ if battle_log:
                     else:
                         check_ability_terrain_setter(line)
                 # This is seen in cases where hp is directly set, like in pain split
-                # Example: mon targeted by pains plit --> |-sethp|p1a: Pawmot|100\/100|[from] move: Pain Split|[silent]
+                # Example: mon targeted by pain split --> |-sethp|p1a: Pawmot|100\/100|[from] move: Pain Split|[silent]
                 # Example: mon using pain split --> |-sethp|p2b: Calyrex|73\/100|[from] move: Pain Split
                 case '-sethp':
                     check_set_hp(line)
@@ -831,3 +832,10 @@ if battle_log:
                 case 'turn':
                     turn += 1
     print(pokes)
+    
+    # to submit the stats to the stats sheet
+    for trainer in pokes:
+        for pokemon in pokes[trainer]:
+            next_pokemon = pokes[trainer][pokemon]
+            if next_pokemon.nickname != 'null':
+                updateSheet(next_pokemon)
