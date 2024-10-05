@@ -1,5 +1,6 @@
 import os.path
 import gspread
+import time
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -12,7 +13,7 @@ from googleapiclient.errors import HttpError
 SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
 
 # The ID and range of a sample spreadsheet.
-SAMPLE_SPREADSHEET_ID = "1F40BYNNeUnYXjvWSb4ptXQlWuHae9pQosdxH3TyFn4A"
+SAMPLE_SPREADSHEET_ID = "1d2RLi47mF2WcRNrJhjzVUDJDimCwJiVLoJVpi5Uk03s"
 SAMPLE_RANGE_NAME = "Stats!C2:C"
 
 def updateSheet(pokemon):
@@ -41,7 +42,7 @@ def updateSheet(pokemon):
         client = gspread.auth.authorize(creds)
         
         # Open the Google Sheet
-        sheet = client.open("Calyrex_OPmon_draft").worksheet("Stats")
+        sheet = client.open("Calyrex_OPmon_draft").worksheet("Copy of Stats")
         
         # Find the row with the matching species
         cell = sheet.find(pokemon.species, in_column=3)
@@ -49,47 +50,62 @@ def updateSheet(pokemon):
         if cell:
             row = cell.row
             
-            # Update the respective columns
-            
-            # increment sets active by 1
+            # Function to update cell with retry mechanism
+            def update_cell_with_retry(row, col, new_value):
+                attempts = 0
+                while attempts < 5:  # Max 3 retries
+                    try:
+                        sheet.update_cell(row, col, new_value)
+                        break
+                    except Exception as e:
+                        attempts += 1
+                        if attempts >= 3:
+                            print(f"Failed to update cell after {attempts} attempts: {e}")
+                        else:
+                            print(f"Error occurred while updating cell ({row}, {col}), retrying in 30 seconds...: {e}")
+                            time.sleep(30)
+
+            # Increment sets active by 1
             new_value = int(sheet.cell(row, 4).value) + 1
-            sheet.update_cell(row, 4, new_value)
+            update_cell_with_retry(row, 4, new_value)
                 
             if pokemon.damage_done > 0:
                 new_value = int(sheet.cell(row, 5).value) + pokemon.damage_done
-                sheet.update_cell(row, 5, new_value)
+                update_cell_with_retry(row, 5, new_value)
             
             if pokemon.damage_tanked > 0:
                 new_value = int(sheet.cell(row, 6).value) + pokemon.damage_tanked
-                sheet.update_cell(row, 6, new_value)
+                update_cell_with_retry(row, 6, new_value)
                 
             if pokemon.healing_done > 0:
                 new_value = int(sheet.cell(row, 7).value) + pokemon.healing_done
-                sheet.update_cell(row, 7, new_value)
+                update_cell_with_retry(row, 7, new_value)
             
             if pokemon.statuses_inflicted > 0:
                 new_value = int(sheet.cell(row, 8).value) + pokemon.statuses_inflicted
-                sheet.update_cell(row, 8, new_value)
+                update_cell_with_retry(row, 8, new_value)
                 
             if pokemon.blocks_for > 0:
                 new_value = int(sheet.cell(row, 9).value) + pokemon.blocks_for
-                sheet.update_cell(row, 9, new_value)
+                update_cell_with_retry(row, 9, new_value)
                 
             if pokemon.blocks_against > 0:
                 new_value = int(sheet.cell(row, 10).value) + pokemon.blocks_against
-                sheet.update_cell(row, 10, new_value)
+                update_cell_with_retry(row, 10, new_value)
             
             if pokemon.kills > 0:
-                new_value = int(sheet.cell(row, 11).value) + pokemon.statuses_inflicted
-                sheet.update_cell(row, 11, new_value)      
+                new_value = int(sheet.cell(row, 11).value) + pokemon.kills
+                update_cell_with_retry(row, 11, new_value)
 
             if pokemon.fainted:
                 new_value = int(sheet.cell(row, 12).value) + 1
-                sheet.update_cell(row, 12, new_value)
+                update_cell_with_retry(row, 12, new_value)
                 
             if pokemon.betrayals > 0:
                 new_value = int(sheet.cell(row, 13).value) + pokemon.betrayals
-                sheet.update_cell(row, 13, new_value)
+                update_cell_with_retry(row, 13, new_value)
+        else:
+            print(f"Mon {pokemon.species} not found")
             
     except Exception as e:
         print("we goofed")

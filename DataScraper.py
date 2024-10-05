@@ -106,7 +106,7 @@ turn = 0
 
 # Provide the path to your HTML file -- TODO Run this on the entire folder not just one html file
 # TODO: Need update replays for the first 6 tests that use external replay and not user-perspective based replays
-file_path = 'Replays\First Real Game -- LucaTony vs IGA.html'
+file_path = 'Replays\RealGames-VGC_CalyrexOPMons\Game 2 - LucaTony VS IGA.html'
 
 # Get the battle log from the html file
 battle_log = parse_html_script(file_path)[0]
